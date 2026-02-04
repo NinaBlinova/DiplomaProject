@@ -38,30 +38,46 @@ conn.close()
 
 # 2. Загрузка экономических показателей
 df_econ = pd.read_csv(r"C:\Users\blino\DiplomaProject\economic_data.csv")
+df_econ.replace('..', np.nan, inplace=True)
+numeric_econ_cols = [
+    'Core CPI,seas.adj,,, [CORESA]',
+    'CPI Price, % y-o-y, not seas. adj.,, [CPTOTSAXNZGY]',
+    'Real Effective Exchange Rate,,,, [REER]',
+    'Retail Sales Volume,Index,,, [RETSALESSA]',
+    'Unemployment rate,Percent,,, [UNEMPSA_]'
+]
+
+df_econ[numeric_econ_cols] = df_econ[numeric_econ_cols].astype(float)
 df_econ['Year'] = pd.to_datetime(df_econ['Time']).dt.year
 df_econ['Month'] = pd.to_datetime(df_econ['Time']).dt.month
+
+# print(df_econ)
 
 # Объединяем налоговые и экономические данные
 df = pd.merge(df_tax, df_econ, on=['Year', 'Month'], how='left')
 
-# 3. Признаки и таргет
+# 3. Признаки
 categorical_features = ['season', 'TaxType', 'TaxpayerType', 'activity_type', 'registration_district']
-numeric_features = ['Year', 'Month', 'has_employees', 'employees_count', 'CPI', 'REER', 'RetailSales', 'Unemployment']
+numeric_features = ['Year', 'Month', 'has_employees', 'employees_count', 'Core CPI,seas.adj,,, [CORESA]',
+                    'CPI Price, % y-o-y, not seas. adj.,, [CPTOTSAXNZGY]', 'Real Effective Exchange Rate,,,, [REER]',
+                    'Retail Sales Volume,Index,,, [RETSALESSA]', 'Unemployment rate,Percent,,, [UNEMPSA_]']
 
 X_cat = df[categorical_features].fillna('Unknown')
 X_num = df[numeric_features].fillna(0)
-
 # Таргет
 y = df['TaxAmount'].values
 
 # 4. Преобразование признаков
 # One-Hot для категориальных
-encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
 X_cat_encoded = encoder.fit_transform(X_cat)
+print(X_cat_encoded)
 
 # Масштабирование числовых признаков
 scaler = StandardScaler()
 X_num_scaled = scaler.fit_transform(X_num)
+print('------')
+print(X_num_scaled)
 
 # Объединяем признаки для нейросети
 X_nn = np.hstack([X_num_scaled, X_cat_encoded])

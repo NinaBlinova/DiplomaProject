@@ -99,14 +99,14 @@ def train_and_evaluate(X, y, model_name):
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    mae = mean_absolute_error(y_test, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    r2 = r2_score(y_test, y_pred)
-
-    print(f"\n Модель: {model_name}")
-    print(f"MAE  = {mae:,.2f}")
-    print(f"RMSE = {rmse:,.2f}")
-    print(f"R²   = {r2:.4f}")
+    # mae = mean_absolute_error(y_test, y_pred)
+    # rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    # r2 = r2_score(y_test, y_pred)
+    #
+    # print(f"\n Модель: {model_name}")
+    # print(f"MAE  = {mae:,.2f}")
+    # print(f"RMSE = {rmse:,.2f}")
+    # print(f"R²   = {r2:.4f}")
 
     # уравнение
     # regressor = model.named_steps['regressor']
