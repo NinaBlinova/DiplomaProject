@@ -1,32 +1,44 @@
-import pyodbc
+from sqlalchemy import create_engine
+import pandas as pd
 
 
-class Database:
-    def __init__(self):
-        self.connection = None
+class DatabaseEngine:
+    def __init__(self, server="localhost", database="Taxpayer_Database_DiplomaProject",
+                 driver="ODBC Driver 17 for SQL Server"):
+        self.server = server
+        self.database = database
+        self.driver = driver
+        self.engine = None
 
-    def get_connection(self):
-        """Получить соединение с базой данных"""
-        if self.connection is None:
+    def get_engine(self):
+        """Создать или вернуть существующий SQLAlchemy engine"""
+        if self.engine is None:
+            connection_string = (
+                f"mssql+pyodbc://@{self.server}/{self.database}?"
+                f"trusted_connection=yes&"
+                f"driver={self.driver.replace(' ', '+')}"
+            )
             try:
-                self.connection = pyodbc.connect(
-                    "DRIVER={ODBC Driver 17 for SQL Server};"
-                    "Server=localhost;"
-                    "Database=Taxpayer_Database_DiplomaProject;"
-                    "Trusted_Connection=yes;"
-                    "MARS_Connection=yes;"
-                )
-            except pyodbc.Error as e:
-                print(f"Ошибка подключения к базе данных: {e}")
+                self.engine = create_engine(connection_string)
+            except Exception as e:
+                print(f"Ошибка при создании engine: {e}")
                 return None
-        return self.connection
+        return self.engine
 
-    def close_connection(self):
-        """Закрыть соединение"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
+    def execute_query(self, query):
+        """Выполнить SQL-запрос и вернуть DataFrame"""
+        engine = self.get_engine()
+        if engine is None:
+            return None
+        try:
+            df = pd.read_sql(query, engine)
+            return df
+        except Exception as e:
+            print(f"Ошибка при выполнении запроса: {e}")
+            return None
 
-
-# Создаем глобальный экземпляр
-db = Database()
+    def dispose_engine(self):
+        """Закрыть engine"""
+        if self.engine:
+            self.engine.dispose()
+            self.engine = None
