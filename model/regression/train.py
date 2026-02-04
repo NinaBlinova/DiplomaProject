@@ -1,21 +1,19 @@
 import joblib
-import pyodbc
+from sqlalchemy import create_engine
 import pandas as pd
 import numpy as np
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 import plotly.graph_objects as go
+from xgboost import XGBRegressor
 
-conn = pyodbc.connect(
-    "DRIVER={ODBC Driver 17 for SQL Server};"
-    "Server=localhost;"
-    "Database=Taxpayer_Database_DiplomaProject;"
-    "Trusted_Connection=yes;"
+engine = create_engine(
+    "mssql+pyodbc://@localhost/Taxpayer_Database_DiplomaProject?" +
+    "trusted_connection=yes&" +
+    "driver=ODBC+Driver+17+for+SQL+Server"
 )
 
 query = """
@@ -40,8 +38,8 @@ INNER JOIN Taxpayer t
     ON m.TaxpayerId = t.TaxpayerId;
 """
 
-df = pd.read_sql(query, conn)
-conn.close()
+df = pd.read_sql(query, engine)
+engine.dispose()
 
 # print(df.shape)
 
@@ -60,12 +58,12 @@ X = df[features]
 
 # 2. Типы признаков
 categorical_features = [
-    'season', 'TaxType', 'TaxpayerType',
+    'Year', 'season', 'TaxType', 'TaxpayerType',
     'activity_type', 'registration_district'
 ]
 
 numeric_features = [
-    'Year', 'Month', 'has_employees', 'employees_count'
+    'Month', 'has_employees', 'employees_count'
 ]
 
 categorical_transformer = Pipeline(steps=[
@@ -91,9 +89,15 @@ def train_and_evaluate(X, y, model_name):
         X, y, test_size=0.2, random_state=42
     )
 
-    model = Pipeline(steps=[
+    model = Pipeline([
         ('preprocessor', preprocessor),
-        ('regressor', LinearRegression())
+        ('regressor', XGBRegressor(
+            n_estimators=500,
+            max_depth=5,
+            learning_rate=0.05,
+            objective='reg:squarederror',
+            random_state=42
+        ))
     ])
 
     model.fit(X_train, y_train)
