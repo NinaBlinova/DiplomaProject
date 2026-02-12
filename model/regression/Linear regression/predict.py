@@ -91,8 +91,8 @@ year_summary = future_df.groupby(
     TotalTax=('PredictedTax', 'sum')
 ).reset_index()
 
-future_df.to_csv("monthly_tax_forecast_next_year.csv", index=False)
-year_summary.to_csv("year_tax_forecast_summary.csv", index=False)
+future_df_income = future_df.drop(columns=['PredictedTax'])  # убираем только прогноз налогов
+future_df_income.to_csv("predicted_income_transaction_next_year.csv", index=False)
 
 import plotly.express as px
 
@@ -134,6 +134,6 @@ fig_tax_avg = px.bar(
     monthly_tax_avg,
     x='Month',
     y='PredictedTax',
-    title='Средний прогноз налоговых поступлений по месяцам',
+    title='Средний прогноз налоговых поступлений по месяцам от одного человека',
 )
 fig_tax_avg.show()

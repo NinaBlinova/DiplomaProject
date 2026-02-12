@@ -1,48 +1,18 @@
 from flask import Flask
-from dash import Dash, dcc, html, Input, Output
-import plotly.graph_objects as go
+from flask_cors import CORS
 
 
-server = Flask(__name__)
+from routes.routes_taxpayers import routes_taxpayer
 
-app = Dash(
-    __name__,
-    server=server,
-    url_base_pathname='/dashboard/'
-)
+app = Flask(__name__)
+app.secret_key = 'your-very-secret-key'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False
 
-app.layout = html.Div([
-    html.H4('Interactive color selection with simple Dash example'),
-    html.P("Select color:"),
-    dcc.Dropdown(
-        id="getting-started-x-dropdown",
-        options=['Gold', 'MediumTurquoise', 'LightGreen'],
-        value='Gold',
-        clearable=False,
-    ),
-    dcc.Graph(id="getting-started-x-graph"),
-])
+CORS(app)
+app.register_blueprint(routes_taxpayer)
 
-
-@app.callback(
-    Output("getting-started-x-graph", "figure"),
-    Input("getting-started-x-dropdown", "value")
-)
-def update_graph(color):
-    fig = go.Figure(
-        data=go.Bar(
-            x=["A", "B", "C"],
-            y=[4, 1, 2],
-            marker_color=color
-        )
-    )
-    return fig
-
-
-@server.route('/')
-def hello_world():
-    return 'Hello World!'
-
-
+# --- Запуск ---
 if __name__ == '__main__':
-    server.run(debug=True)
+    app.run(host='0.0.0.0', port=5002, debug=True)
