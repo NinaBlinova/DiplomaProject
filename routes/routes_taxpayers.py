@@ -65,8 +65,8 @@ def get_taxpayers():
         district_filter = request.args.get('district', '')
         sort_by = request.args.get('sortBy', 'TaxpayerId')
         sort_order = request.args.get('sortOrder', 'asc').upper()
-        print("PAGE:", page)
-        print("PAGE SIZE:", page_size)
+        # print("PAGE:", page)
+        # print("PAGE SIZE:", page_size)
 
         result = repo.get_taxpayers_paginated(
             page=page,

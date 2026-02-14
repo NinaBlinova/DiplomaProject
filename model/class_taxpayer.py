@@ -110,7 +110,7 @@ class TaxpayerRepository:
                     lambda x: int(x) if pd.notna(x) else None
                 )
                 df['TaxpayerId'] = df['TaxpayerId'].astype(int)
-                print(df)
+                # print(df)
 
             return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
