@@ -5,9 +5,9 @@ import pandas as pd
 class ForecastService:
 
     def __init__(self):
-        self.income_model = joblib.load("linear_income_model.pkl")
-        self.transactions_model = joblib.load("linear_transactions_model.pkl")
-        self.tax_model = joblib.load("linear_tax_model.pkl")
+        self.income_model = joblib.load("model/regression/Linear regression/linear_income_model.pkl")
+        self.transactions_model = joblib.load("model/regression/Linear regression/linear_transactions_model.pkl")
+        self.tax_model = joblib.load("model/regression/Linear regression/linear_tax_model.pkl")
 
     def predict_year(self, taxpayer_row, year: int):
 
