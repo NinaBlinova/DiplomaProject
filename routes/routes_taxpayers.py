@@ -3,14 +3,15 @@ from flask import Blueprint, jsonify, request
 import json
 import numpy as np
 
-from model.class_taxpayer import TaxpayerRepository
+from model.TaxpayerRepository import TaxpayerRepository
 from model.database import DatabaseEngine
+from model.TaxpayerService import TaxpayerService
 
 routes_taxpayer = Blueprint('routes_taxpayer', __name__)
 
 db_engine = DatabaseEngine()
 repo = TaxpayerRepository(db_engine)
-
+service = TaxpayerService(repo)
 
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -68,7 +69,7 @@ def get_taxpayers():
         # print("PAGE:", page)
         # print("PAGE SIZE:", page_size)
 
-        result = repo.get_taxpayers_paginated(
+        result = service.get_taxpayers_paginated(
             page=page,
             page_size=page_size,
             inn_filter=inn_filter if inn_filter else None,
@@ -105,7 +106,7 @@ def get_taxpayer_by_inn(inn):
     """
     Получить налогоплательщика по ИНН
     """
-    df = repo.get_taxpayer_by_inn(inn)
+    df = service.get_taxpayer_by_inn(inn)
 
     if df.empty:
         return jsonify({"error": "Taxpayer not found"}), 404
