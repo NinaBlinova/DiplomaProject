@@ -99,68 +99,7 @@ class TaxDataRepository:
         """
         return self.db_engine.execute_query(query, [inn])
 
-    def get_generale_sum(self, tax_type=None):
-        if tax_type is None:
-            query = """
-            SELECT 
-                Year, 
-                Month, 
-                SUM(IncomeAmount) AS TotalIncome,
-                SUM(transactions_count) AS TotalTransactions,
-                SUM(TaxAmount) AS TotalTax
-            FROM MonthlyTaxData
-            GROUP BY Year, Month
-            ORDER BY Year, Month
-            """
-            return self.db_engine.execute_query(query)
-        else:
-            query = """
-            SELECT 
-                Year, 
-                Month, 
-                SUM(IncomeAmount) AS TotalIncome,
-                SUM(transactions_count) AS TotalTransactions,
-                SUM(TaxAmount) AS TotalTax
-            FROM MonthlyTaxData
-            WHERE TaxType = ?
-            GROUP BY Year, Month
-            ORDER BY Year, Month
-            """
-            params = [tax_type]
-            return self.db_engine.execute_query(query, params)
-
-    def get_monthly_tax_income_transaction(self, tax_type=None):
-        """
-        Get all data from table MonthlyTaxData
-        """
-        if tax_type is None:
-            query = """
-                SELECT 
-                    Year, 
-                    Month, 
-                    IncomeAmount AS TotalIncome,
-                    transactions_count AS TotalTransactions,
-                    TaxAmount AS TotalTax
-                FROM MonthlyTaxData
-                ORDER BY Year, Month
-            """
-            return self.db_engine.execute_query(query)
-        else:
-            query = """
-                SELECT 
-                    Year, 
-                    Month, 
-                    IncomeAmount AS TotalIncome,
-                    transactions_count AS TotalTransactions,
-                    TaxAmount AS TotalTax
-                FROM MonthlyTaxData
-                WHERE TaxType = ?
-                ORDER BY Year, Month
-            """
-            params = [tax_type]
-            return self.db_engine.execute_query(query, params)
-
-    def get_predict_data(self, year=None):
+    def get_predict_data(self):
         """
             Returns prediction data from Predict table.
             If year is provided, filters by year.
@@ -185,3 +124,59 @@ class TaxDataRepository:
             """
         return self.db_engine.execute_query(query)
 
+    def get_monthly_data(
+            self,
+            source="real",  # "real" | "predict"
+            tax_type=None,
+            aggregate=False
+    ):
+        if source == "real":
+            table = "MonthlyTaxData"
+            income_col = "IncomeAmount"
+            trans_col = "transactions_count"
+            tax_col = "TaxAmount"
+        elif source == "predict":
+            table = "Predict"
+            income_col = "Income"
+            trans_col = "Transactions"
+            tax_col = "Tax"
+        else:
+            raise ValueError("Invalid source type")
+
+        if aggregate:
+            select_part = f"""
+                SELECT 
+                    Year,
+                    Month,
+                    SUM({income_col}) AS TotalIncome,
+                    SUM({trans_col}) AS TotalTransactions,
+                    SUM({tax_col}) AS TotalTax
+            """
+            group_part = "GROUP BY Year, Month"
+        else:
+            select_part = f"""
+                SELECT 
+                    Year,
+                    Month,
+                    {income_col} AS TotalIncome,
+                    {trans_col} AS TotalTransactions,
+                    {tax_col} AS TotalTax
+            """
+            group_part = ""
+
+        where_part = ""
+        params = []
+
+        if tax_type is not None:
+            where_part = "WHERE TaxType = ?"
+            params.append(tax_type)
+
+        query = f"""
+            {select_part}
+            FROM {table}
+            {where_part}
+            {group_part}
+            ORDER BY Year, Month
+        """
+
+        return self.db_engine.execute_query(query, params)
