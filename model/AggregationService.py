@@ -5,9 +5,9 @@ class AggregationService:
         agg = "sum" if mode == "sum" else "median"
 
         return df.groupby("Year").agg(
-            Income=("Income", agg),
-            Transactions=("Transactions", agg),
-            Tax=("Tax", agg)
+            Income=("TotalIncome", agg),
+            Transactions=("TotalTransactions", agg),
+            Tax=("TotalTax", agg)
         ).reset_index()
 
     @staticmethod
@@ -15,9 +15,9 @@ class AggregationService:
         agg = "sum" if mode == "sum" else "median"
 
         return df.groupby(["Year", "Month"]).agg(
-            Income=("Income", agg),
-            Transactions=("Transactions", agg),
-            Tax=("Tax", agg)
+            Income=("TotalIncome", agg),
+            Transactions=("TotalTransactions", agg),
+            Tax=("TotalTax", agg)
         ).reset_index()
 
     @staticmethod

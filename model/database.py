@@ -19,7 +19,7 @@ class DatabaseEngine:
                 f"driver={self.driver.replace(' ', '+')}"
             )
             try:
-                self.engine = create_engine(connection_string)
+                self.engine = create_engine(connection_string, fast_executemany=True)
             except Exception as e:
                 print(f"Ошибка при создании engine: {e}")
                 return None
