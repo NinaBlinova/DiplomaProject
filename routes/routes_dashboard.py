@@ -7,7 +7,9 @@ from flask import Blueprint, jsonify
 from model.AggregationService import AggregationService
 from model.ForecastService import ForecastService, logger
 from model.TaxDataRepository import TaxDataRepository
+from model.YearlyMedianLoader import YearlyMedianLoader
 from model.database import DatabaseEngine
+from model.YearlyGrowthLoader import YearlyGrowthLoader
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
@@ -15,6 +17,8 @@ db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
 forecaster = ForecastService()
+loader = YearlyGrowthLoader(db_engine, repository, aggregator)
+median_loader = YearlyMedianLoader(db_engine, repository, aggregator)
 
 
 # support function
@@ -127,15 +131,44 @@ def get_yearly_median_inn(inn):
 @dashboard_bp.route('/monthly/median/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_median_all(tax_type):
     try:
-        df = repository.get_monthly_data(
-            source="real",
-            tax_type=tax_type,
-            aggregate=False
+        median_df = repository.get_yearly_growth_by_type(
+            "yearly_stats_median",
+            tax_type
         )
-        return handle_df_response(df, lambda x: aggregator.aggregate_monthly(x, "median"))
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
+        # Если данных нет — запускаем загрузчик
+        if median_df is None:
+            print("Данных нет. Запускаем YearlyMedianLoader...")
+            median_loader.load_monthly_median(tax_type)
+
+            median_df = repository.get_yearly_growth_by_type(
+                "yearly_stats_median",
+                tax_type
+            )
+
+            if median_df is None:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data found after loading'
+                }), 404
+
+        # Переименование колонок для фронта
+        median_df = median_df.rename(columns={
+            "IncomeMedian": "Income",
+            "TaxMedian": "Tax",
+            "TransactionsMedian": "Transactions"
+        })
+
+        return jsonify({
+            'success': True,
+            'data': df_to_json(median_df)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'])
@@ -170,63 +203,81 @@ def get_yearly_growth_inn(inn):
 @dashboard_bp.route('/yearly/growth/general/<tax_type>', methods=['GET'])
 def get_yearly_growth_general(tax_type):
     try:
-        df_real = repository.get_monthly_data(
-            source="real",
-            tax_type=tax_type,
-            aggregate=False
+        gr = repository.get_yearly_growth_by_type(
+            "yearly_growth_general",
+            tax_type
         )
 
-        df_pred = repository.get_monthly_data(
-            source="predict",
-            tax_type=tax_type,
-            aggregate=False
-        )
-        if df_real.empty and df_pred.empty:
-            return jsonify({'success': False, 'error': 'No data found'}), 404
+        if gr is None:
+            print("Данных нет. Запускаем YearlyGrowthLoader...")
+            loader.load_general_growth(tax_type)
+            gr = repository.get_yearly_growth_by_type(
+                "yearly_growth_general",
+                tax_type
+            )
+            if gr is None:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data found after loading'
+                }), 404
 
-        yearly_sum_real = aggregator.aggregate_yearly(df_real, "sum")
-        yearly_sum_pred = aggregator.aggregate_yearly(df_pred, "sum")
-
-        combined = pd.concat([yearly_sum_real, yearly_sum_pred], ignore_index=True)
-        combined = combined.sort_values("Year")
-
-        growth = aggregator.calculate_growth(combined)
-        return jsonify({'success': True, 'data': df_to_json(growth)})
+        print(gr)
+        gr = gr.rename(columns={
+            "IncomeTotal": "Income",
+            "TaxTotal": "Tax",
+            "TransactionTotal": "Transactions",
+            "IncomeGrowth": "IncomeGrowth_%",
+            "TaxGrowth": "TaxGrowth_%",
+            "TransactionsGrowth": "TransactionsGrowth_%"
+        })
+        return jsonify({
+            'success': True,
+            'data': df_to_json(gr)
+        })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @dashboard_bp.route('/yearly/growth/median', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/yearly/growth/median/<tax_type>', methods=['GET'])
 def get_yearly_growth_median(tax_type):
     try:
-        df_real = repository.get_monthly_data(
-            source="real",
-            tax_type=tax_type,
-            aggregate=False
+        gr = repository.get_yearly_growth_by_type(
+            "yearly_growth_median",
+            tax_type
         )
-
-        df_pred = repository.get_monthly_data(
-            source="predict",
-            tax_type=tax_type,
-            aggregate=False
-        )
-
-        if df_real.empty and df_pred.empty:
-            return jsonify({'success': False, 'error': 'No data found'}), 404
-
-        yearly_sum_real = aggregator.aggregate_yearly(df_real, "median")
-        yearly_sum_pred = aggregator.aggregate_yearly(df_pred, "median")
-
-        combined = pd.concat([yearly_sum_real, yearly_sum_pred], ignore_index=True)
-        combined = combined.sort_values("Year")
-
-        growth = aggregator.calculate_growth(combined)
-
-        return jsonify({'success': True, 'data': df_to_json(growth)})
-
+        if gr is None:
+            print("Данных нет. Запускаем YearlyGrowthLoader...")
+            loader.load_median_growth(tax_type)
+            gr = repository.get_yearly_growth_by_type(
+                "yearly_growth_general",
+                tax_type
+            )
+            if gr is None:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data found after loading'
+                }), 404
+        print(gr)
+        gr = gr.rename(columns={
+            "IncomeTotal": "Income",
+            "TaxTotal": "Tax",
+            "TransactionTotal": "Transactions",
+            "IncomeGrowth": "IncomeGrowth_%",
+            "TaxGrowth": "TaxGrowth_%",
+            "TransactionsGrowth": "TransactionsGrowth_%"
+        })
+        return jsonify({
+            'success': True,
+            'data': df_to_json(gr)
+        })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 # PREDICTION

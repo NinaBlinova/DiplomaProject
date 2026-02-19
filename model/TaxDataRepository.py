@@ -180,3 +180,24 @@ class TaxDataRepository:
         """
 
         return self.db_engine.execute_query(query, params)
+
+    def get_yearly_growth_by_type(self, table_name, tax_type=None, year=2026):
+        if tax_type is None:
+            query = f"""
+                SELECT *
+                FROM {table_name}
+                WHERE [Year] = ? AND TaxType IS NULL
+            """
+            params = [year]
+        else:
+            query = f"""
+                SELECT *
+                FROM {table_name}
+                WHERE [Year] = ? AND TaxType = ?
+            """
+            params = [year, tax_type]
+
+        df = self.db_engine.execute_query(query, params)
+
+        return None if df.empty else df
+
