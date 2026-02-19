@@ -1,4 +1,6 @@
 import json
+import time
+
 import numpy as np
 import pandas as pd
 from flask import Blueprint, jsonify
@@ -14,6 +16,7 @@ repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
 forecaster = ForecastService()
 
+
 # support function
 def convert_numpy_types(obj):
     if isinstance(obj, (np.integer,)):
@@ -26,6 +29,7 @@ def convert_numpy_types(obj):
         return obj.isoformat()
     return obj
 
+
 def df_to_json(df):
     if df is None or df.empty:
         return []
@@ -36,6 +40,7 @@ def df_to_json(df):
             default_handler=convert_numpy_types
         )
     )
+
 
 def ensure_prediction_up_to_date():
     df_real_years = repository.get_years()
@@ -70,6 +75,15 @@ def handle_df_response(df, transform=None):
     return jsonify({'success': True, 'data': df_to_json(df)})
 
 
+def initialize_predictions():
+    try:
+        print("🔄 Checking predictions on startup...")
+        df = ensure_prediction_up_to_date()
+        print(f"✅ Prediction check complete. Rows: {len(df)}")
+    except Exception as e:
+        print("❌ Error during prediction initialization:", e)
+
+
 # TAXPAYER INFO
 @dashboard_bp.route('/taxpayer/<inn>', methods=['GET'])
 def get_taxpayer(inn):
@@ -78,6 +92,7 @@ def get_taxpayer(inn):
         return handle_df_response(taxpayer)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # MONTHLY DATA
 @dashboard_bp.route('/monthly/<inn>', methods=['GET'])
@@ -88,6 +103,7 @@ def get_monthly(inn):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 @dashboard_bp.route('/yearly/totals/<inn>', methods=['GET'])
 def get_yearly_totals(inn):
     try:
@@ -95,6 +111,7 @@ def get_yearly_totals(inn):
         return handle_df_response(df, lambda x: aggregator.aggregate_yearly(x, "sum"))
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # YEARLY MEDIAN
 @dashboard_bp.route('/yearly/median/<inn>', methods=['GET'])
@@ -104,6 +121,7 @@ def get_yearly_median_inn(inn):
         return handle_df_response(df, lambda x: aggregator.aggregate_yearly(x, "median"))
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @dashboard_bp.route('/monthly/median', defaults={'tax_type': None}, methods=['GET'], strict_slashes=False)
 @dashboard_bp.route('/monthly/median/<tax_type>', methods=['GET'], strict_slashes=False)
@@ -118,6 +136,7 @@ def get_monthly_median_all(tax_type):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 @dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'])
 def get_monthly_general_all(tax_type):
@@ -130,6 +149,7 @@ def get_monthly_general_all(tax_type):
         return handle_df_response(df)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # YEARLY GROWTH
 @dashboard_bp.route('/yearly/growth/<inn>', methods=['GET'])
@@ -145,41 +165,41 @@ def get_yearly_growth_inn(inn):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 @dashboard_bp.route('/yearly/growth/general', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/yearly/growth/general/<tax_type>', methods=['GET'])
 def get_yearly_growth_general(tax_type):
     try:
-        df_predicted = ensure_prediction_up_to_date()
         df_real = repository.get_monthly_data(
             source="real",
             tax_type=tax_type,
-            aggregate=True
+            aggregate=False
         )
 
         df_pred = repository.get_monthly_data(
             source="predict",
             tax_type=tax_type,
-            aggregate=True
+            aggregate=False
         )
-        if df_real.empty and df_predicted.empty:
+        if df_real.empty and df_pred.empty:
             return jsonify({'success': False, 'error': 'No data found'}), 404
+
         yearly_sum_real = aggregator.aggregate_yearly(df_real, "sum")
         yearly_sum_pred = aggregator.aggregate_yearly(df_pred, "sum")
-        combined = pd.concat([yearly_sum_real, yearly_sum_pred], ignore_index=True)
 
+        combined = pd.concat([yearly_sum_real, yearly_sum_pred], ignore_index=True)
         combined = combined.sort_values("Year")
 
         growth = aggregator.calculate_growth(combined)
-
         return jsonify({'success': True, 'data': df_to_json(growth)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @dashboard_bp.route('/yearly/growth/median', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/yearly/growth/median/<tax_type>', methods=['GET'])
 def get_yearly_growth_median(tax_type):
     try:
-        df_predicted = ensure_prediction_up_to_date()
         df_real = repository.get_monthly_data(
             source="real",
             tax_type=tax_type,
@@ -192,15 +212,22 @@ def get_yearly_growth_median(tax_type):
             aggregate=False
         )
 
-        if df_real.empty and df_predicted.empty:
+        if df_real.empty and df_pred.empty:
             return jsonify({'success': False, 'error': 'No data found'}), 404
+
         yearly_sum_real = aggregator.aggregate_yearly(df_real, "median")
         yearly_sum_pred = aggregator.aggregate_yearly(df_pred, "median")
+
         combined = pd.concat([yearly_sum_real, yearly_sum_pred], ignore_index=True)
+        combined = combined.sort_values("Year")
+
         growth = aggregator.calculate_growth(combined)
+
         return jsonify({'success': True, 'data': df_to_json(growth)})
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # PREDICTION
 @dashboard_bp.route('/predict_inn/<inn>', methods=['GET'])
@@ -221,6 +248,7 @@ def get_prediction_inn(inn):
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @dashboard_bp.route('/predict_generale/result', methods=['GET'])
 def get_prediction_general_result():
@@ -251,6 +279,7 @@ def get_prediction_general_result():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 @dashboard_bp.route('/taxpayers', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/taxpayers/<tax_type>', methods=['GET'])
 def get_taxpayers_api(tax_type):
@@ -270,6 +299,7 @@ def get_taxpayers_api(tax_type):
             "message": str(e)
         }), 500
 
+
 # GLOBAL YEAR RANGE
 @dashboard_bp.route('/global-year-range', methods=['GET'])
 def get_global_year_range():
@@ -288,6 +318,7 @@ def get_global_year_range():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # CLOSE DB
 @dashboard_bp.route('/close', methods=['POST'])

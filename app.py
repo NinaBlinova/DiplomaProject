@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 
-from routes.routes_dashboard import dashboard_bp
+from routes.routes_dashboard import dashboard_bp, initialize_predictions
 from routes.routes_taxpayers import routes_taxpayer
 
 
@@ -18,6 +18,10 @@ def create_app(test_config=None):
     CORS(app)
     app.register_blueprint(routes_taxpayer)
     app.register_blueprint(dashboard_bp)
+
+    with app.app_context():
+        initialize_predictions()
+
     return app
 
 
