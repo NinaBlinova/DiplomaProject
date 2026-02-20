@@ -54,7 +54,7 @@ class YearlyMedianLoader:
             print("No data for median (real + predict)")
             return
 
-        median_df = self.aggregator.aggregate_monthly(df, "median")
+        median_df = self.aggregator.aggregate_yearly(df, "median")
 
         if median_df.empty:
             print("No data after aggregation")

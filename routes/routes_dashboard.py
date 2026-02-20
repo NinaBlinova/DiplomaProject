@@ -249,10 +249,10 @@ def get_yearly_growth_median(tax_type):
             tax_type
         )
         if gr is None:
-            print("Данных нет. Запускаем YearlyGrowthLoader...")
+            print("No data. Run YearlyGrowthLoader...")
             loader.load_median_growth(tax_type)
             gr = repository.get_yearly_growth_by_type(
-                "yearly_growth_general",
+                "yearly_growth_median",
                 tax_type
             )
             if gr is None:
