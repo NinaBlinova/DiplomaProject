@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 import pandas as pd
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from model.AggregationService import AggregationService
 from model.ForecastService import ForecastService, logger
 from model.TaxDataRepository import TaxDataRepository
@@ -81,11 +81,11 @@ def handle_df_response(df, transform=None):
 
 def initialize_predictions():
     try:
-        print("🔄 Checking predictions on startup...")
+        print("Checking predictions on startup...")
         df = ensure_prediction_up_to_date()
         print(f"✅ Prediction check complete. Rows: {len(df)}")
     except Exception as e:
-        print("❌ Error during prediction initialization:", e)
+        print("Error during prediction initialization:", e)
 
 
 # TAXPAYER INFO
@@ -131,19 +131,26 @@ def get_yearly_median_inn(inn):
 @dashboard_bp.route('/monthly/median/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_median_all(tax_type):
     try:
+        start_year = request.args.get("startYear", type=int)
+        end_year = request.args.get("endYear", type=int)
         median_df = repository.get_yearly_growth_by_type(
             "yearly_stats_median",
-            tax_type
+            tax_type,
+            has_month=True,
+            start_year=start_year,
+            end_year=end_year
         )
 
-        # Если данных нет — запускаем загрузчик
         if median_df is None:
             print("Данных нет. Запускаем YearlyMedianLoader...")
             median_loader.load_monthly_median(tax_type)
 
             median_df = repository.get_yearly_growth_by_type(
                 "yearly_stats_median",
-                tax_type
+                tax_type,
+                has_month=True,
+                start_year=start_year,
+                end_year=end_year
             )
 
             if median_df is None:
@@ -152,7 +159,6 @@ def get_monthly_median_all(tax_type):
                     'error': 'No data found after loading'
                 }), 404
 
-        # Переименование колонок для фронта
         median_df = median_df.rename(columns={
             "IncomeMedian": "Income",
             "TaxMedian": "Tax",
@@ -170,14 +176,19 @@ def get_monthly_median_all(tax_type):
             'error': str(e)
         }), 500
 
-@dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'])
-@dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'])
+
+@dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'],  strict_slashes=False)
+@dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_general_all(tax_type):
     try:
+        start_year = request.args.get("startYear", type=int)
+        end_year = request.args.get("endYear", type=int)
         df = repository.get_monthly_data(
             source="real",
             tax_type=tax_type,
-            aggregate=True
+            aggregate=True,
+            start_year=start_year,
+            end_year=end_year
         )
         return handle_df_response(df)
     except Exception as e:
@@ -192,7 +203,7 @@ def get_yearly_growth_inn(inn):
         return handle_df_response(
             df,
             lambda x: aggregator.calculate_growth(
-                aggregator.aggregate_yearly(x, "sum")
+                aggregator.aggregate_yearly(x, "median")
             )
         )
     except Exception as e:
@@ -203,17 +214,25 @@ def get_yearly_growth_inn(inn):
 @dashboard_bp.route('/yearly/growth/general/<tax_type>', methods=['GET'])
 def get_yearly_growth_general(tax_type):
     try:
+        start_year = request.args.get("startYear", type=int)
+        end_year = request.args.get("endYear", type=int)
         gr = repository.get_yearly_growth_by_type(
             "yearly_growth_general",
-            tax_type
+            tax_type,
+            has_month=False,
+            start_year=start_year,
+            end_year=end_year
         )
 
         if gr is None:
-            print("Данных нет. Запускаем YearlyGrowthLoader...")
+            print("No data. Start YearlyGrowthLoader...")
             loader.load_general_growth(tax_type)
             gr = repository.get_yearly_growth_by_type(
                 "yearly_growth_general",
-                tax_type
+                tax_type,
+                has_month=False,
+                start_year=start_year,
+                end_year=end_year
             )
             if gr is None:
                 return jsonify({
@@ -240,20 +259,29 @@ def get_yearly_growth_general(tax_type):
             'error': str(e)
         }), 500
 
+
 @dashboard_bp.route('/yearly/growth/median', defaults={'tax_type': None}, methods=['GET'])
 @dashboard_bp.route('/yearly/growth/median/<tax_type>', methods=['GET'])
 def get_yearly_growth_median(tax_type):
     try:
+        start_year = request.args.get("startYear", type=int)
+        end_year = request.args.get("endYear", type=int)
         gr = repository.get_yearly_growth_by_type(
             "yearly_growth_median",
-            tax_type
+            tax_type,
+            has_month=False,
+            start_year=start_year,
+            end_year=end_year
         )
         if gr is None:
             print("No data. Run YearlyGrowthLoader...")
             loader.load_median_growth(tax_type)
             gr = repository.get_yearly_growth_by_type(
                 "yearly_growth_median",
-                tax_type
+                tax_type,
+                has_month=False,
+                start_year=start_year,
+                end_year=end_year
             )
             if gr is None:
                 return jsonify({

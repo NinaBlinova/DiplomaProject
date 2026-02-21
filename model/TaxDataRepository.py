@@ -88,16 +88,43 @@ class TaxDataRepository:
         query = "SELECT * FROM Taxpayer WHERE INN = ?"
         return self.db_engine.execute_query(query, [inn])
 
-    def get_monthly_by_inn(self, inn: str):
+    def get_monthly_by_inn(self, inn: str, start_year=None, end_year=None):
         query = """
-        SELECT m.Year, m.Month, m.IncomeAmount AS TotalIncome,
-                m.transactions_count AS TotalTransactions, m.TaxAmount AS TotalTax
-        FROM MonthlyTaxData m
-        JOIN Taxpayer t ON t.TaxpayerId = m.TaxpayerId
-        WHERE t.INN = ?
-        ORDER BY m.Year, m.Month
+            SELECT 
+                m.Year,
+                m.Month,
+                m.IncomeAmount AS TotalIncome,
+                m.transactions_count AS TotalTransactions,
+                m.TaxAmount AS TotalTax
+            FROM MonthlyTaxData m
+            JOIN Taxpayer t ON t.TaxpayerId = m.TaxpayerId
+            WHERE t.INN = ?
+
+            UNION ALL
+
+            SELECT
+                p.Year,
+                p.Month,
+                p.Income AS TotalIncome,
+                p.Transactions AS TotalTransactions,
+                p.Tax AS TotalTax
+            FROM Predict p
+            WHERE p.INN = ?
         """
-        return self.db_engine.execute_query(query, [inn])
+
+        params = [inn, inn]
+
+        if start_year is not None:
+            query += " AND Year >= ?"
+            params.append(start_year)
+
+        if end_year is not None:
+            query += " AND Year <= ?"
+            params.append(end_year)
+
+        query += " ORDER BY Year, Month"
+
+        return self.db_engine.execute_query(query, params)
 
     def get_predict_data(self):
         """
@@ -128,7 +155,9 @@ class TaxDataRepository:
             self,
             source="real",  # "real" | "predict"
             tax_type=None,
-            aggregate=False
+            aggregate=False,
+            start_year=None,
+            end_year=None
     ):
         if source == "real":
             table = "MonthlyTaxData"
@@ -164,40 +193,76 @@ class TaxDataRepository:
             """
             group_part = ""
 
-        where_part = ""
+        where_clauses = []
         params = []
 
         if tax_type is not None:
-            where_part = "WHERE TaxType = ?"
+            where_clauses.append("TaxType = ?")
             params.append(tax_type)
 
+        if start_year is not None:
+            where_clauses.append("Year >= ?")
+            params.append(start_year)
+
+        if end_year is not None:
+            where_clauses.append("Year <= ?")
+            params.append(end_year)
+
+        where_part = ""
+        if where_clauses:
+            where_part = "WHERE " + " AND ".join(where_clauses)
+
         query = f"""
-            {select_part}
-            FROM {table}
-            {where_part}
-            {group_part}
-            ORDER BY Year, Month
-        """
+               {select_part}
+               FROM {table}
+               {where_part}
+               {group_part}
+               ORDER BY Year, Month
+           """
 
         return self.db_engine.execute_query(query, params)
 
-    def get_yearly_growth_by_type(self, table_name, tax_type=None, year=2026):
+    def get_yearly_growth_by_type(
+            self,
+            table_name,
+            tax_type=None,
+            has_month=False,
+            start_year=None,
+            end_year=None
+    ):
+        where_clauses = []
+        params = []
+
+        # TaxType condition
         if tax_type is None:
-            query = f"""
-                SELECT *
-                FROM {table_name}
-                WHERE [Year] = ? AND TaxType IS NULL
-            """
-            params = [year]
+            where_clauses.append("TaxType IS NULL")
         else:
-            query = f"""
-                SELECT *
-                FROM {table_name}
-                WHERE [Year] = ? AND TaxType = ?
-            """
-            params = [year, tax_type]
+            where_clauses.append("TaxType = ?")
+            params.append(tax_type)
+
+        # Year filters
+        if start_year is not None:
+            where_clauses.append("Year >= ?")
+            params.append(start_year)
+
+        if end_year is not None:
+            where_clauses.append("Year <= ?")
+            params.append(end_year)
+
+        # Build WHERE part safely
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        order_clause = "ORDER BY Year, Month" if has_month else "ORDER BY Year"
+
+        query = f"""
+            SELECT *
+            FROM {table_name}
+            {where_sql}
+            {order_clause}
+        """
 
         df = self.db_engine.execute_query(query, params)
-
         return None if df.empty else df
 
