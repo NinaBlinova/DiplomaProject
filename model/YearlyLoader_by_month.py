@@ -2,28 +2,28 @@ import pandas as pd
 from datetime import datetime
 
 
-class YearlyMedianLoader:
+class YearlyStatsLoader:
 
     def __init__(self, db_engine, repository, aggregator):
         self.db_engine = db_engine
         self.repository = repository
         self.aggregator = aggregator
 
-    def _median_exists(self, year: int, month: int, tax_type=None):
+    def _record_exists(self, table_name: str, year: int, month: int, tax_type=None):
 
         if tax_type is None:
-            query = """
+            query = f"""
                 SELECT COUNT(*) as Cnt
-                FROM dbo.yearly_stats_median
+                FROM dbo.{table_name}
                 WHERE [Year] = ?
                   AND [Month] = ?
                   AND TaxType IS NULL
             """
             params = [year, month]
         else:
-            query = """
+            query = f"""
                 SELECT COUNT(*) as Cnt
-                FROM dbo.yearly_stats_median
+                FROM dbo.{table_name}
                 WHERE [Year] = ?
                   AND [Month] = ?
                   AND TaxType = ?
@@ -31,10 +31,15 @@ class YearlyMedianLoader:
             params = [year, month, tax_type]
 
         df = self.db_engine.execute_query(query, params)
-
         return not df.empty and int(df.iloc[0]["Cnt"]) > 0
 
-    def load_monthly_median(self, tax_type=None):
+    def load_monthly(self, mode: str, tax_type=None):
+        """
+        mode: 'median' или 'sum'
+        """
+
+        if mode not in ["median", "sum"]:
+            raise ValueError("Mode must be 'median' or 'sum'")
 
         df_real = self.repository.get_monthly_data(
             source="real",
@@ -51,24 +56,34 @@ class YearlyMedianLoader:
         df = pd.concat([df_real, df_predict], ignore_index=True)
 
         if df.empty:
-            print("No data for median (real + predict)")
+            print(f"No data for {mode} (real + predict)")
             return
 
-        median_df = self.aggregator.aggregate_yearly(df, "median")
+        result_df = self.aggregator.aggregate_monthly(df, mode)
 
-        if median_df.empty:
+        if result_df.empty:
             print("No data after aggregation")
             return
+
+        if mode == "median":
+            table_name = "yearly_stats_median"
+            income_col = "IncomeMedian"
+            tax_col = "TaxMedian"
+            trans_col = "TransactionsMedian"
+        else:
+            table_name = "yearly_stats_general"
+            income_col = "IncomeGeneral"
+            tax_col = "TaxGeneral"
+            trans_col = "TransactionsGeneral"
 
         engine = self.db_engine.get_engine()
         rows_to_insert = []
 
-        for _, row in median_df.iterrows():
-
+        for _, row in result_df.iterrows():
             year = int(row["Year"])
             month = int(row["Month"])
 
-            if self._median_exists(year, month, tax_type):
+            if self._record_exists(table_name, year, month, tax_type):
                 print(f"⚠ Already exists: {year}-{month}, tax_type={tax_type}")
                 continue
 
@@ -76,9 +91,9 @@ class YearlyMedianLoader:
                 "Year": year,
                 "Month": month,
                 "TaxType": tax_type,
-                "IncomeMedian": float(row["Income"]),
-                "TaxMedian": float(row["Tax"]),
-                "TransactionsMedian": float(row["Transactions"]),
+                income_col: float(row["Income"]),
+                tax_col: float(row["Tax"]),
+                trans_col: float(row["Transactions"]),
                 "CreatedAt": datetime.now()
             })
 
@@ -89,11 +104,11 @@ class YearlyMedianLoader:
         insert_df = pd.DataFrame(rows_to_insert)
 
         insert_df.to_sql(
-            "yearly_stats_median",
+            table_name,
             engine,
             schema="dbo",
             if_exists="append",
             index=False
         )
 
-        print(f"✅ Inserted rows: {len(insert_df)}")
+        print(f"Inserted rows into {table_name}: {len(insert_df)}")

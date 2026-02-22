@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 from model.AggregationService import AggregationService
 from model.ForecastService import ForecastService, logger
 from model.TaxDataRepository import TaxDataRepository
-from model.YearlyMedianLoader import YearlyMedianLoader
+from model.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
 from model.YearlyGrowthLoader import YearlyGrowthLoader
 
@@ -18,7 +18,8 @@ repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
 forecaster = ForecastService()
 loader = YearlyGrowthLoader(db_engine, repository, aggregator)
-median_loader = YearlyMedianLoader(db_engine, repository, aggregator)
+median_loader = YearlyStatsLoader(db_engine, repository, aggregator)
+general_loader = YearlyStatsLoader(db_engine, repository, aggregator)
 
 
 # support function
@@ -142,8 +143,8 @@ def get_monthly_median_all(tax_type):
         )
 
         if median_df is None:
-            print("Данных нет. Запускаем YearlyMedianLoader...")
-            median_loader.load_monthly_median(tax_type)
+            print("Np data. Start YearlyMedianLoader...")
+            median_loader.load_monthly('median', tax_type)
 
             median_df = repository.get_yearly_growth_by_type(
                 "yearly_stats_median",
@@ -183,16 +184,48 @@ def get_monthly_general_all(tax_type):
     try:
         start_year = request.args.get("startYear", type=int)
         end_year = request.args.get("endYear", type=int)
-        df = repository.get_monthly_data(
-            source="real",
-            tax_type=tax_type,
-            aggregate=True,
+        general_df = repository.get_yearly_growth_by_type(
+            "yearly_stats_general",
+            tax_type,
+            has_month=True,
             start_year=start_year,
             end_year=end_year
         )
-        return handle_df_response(df)
+
+        if general_df is None:
+            print("Np data. Start YearlyMedianLoader...")
+            general_loader.load_monthly('sum', tax_type)
+
+            general_df = repository.get_yearly_growth_by_type(
+                "yearly_stats_general",
+                tax_type,
+                has_month=True,
+                start_year=start_year,
+                end_year=end_year
+            )
+
+            if general_df is None:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data found after loading'
+                }), 404
+
+        general_df = general_df.rename(columns={
+            "IncomeGeneral": "Income",
+            "TaxGeneral": "Tax",
+            "TransactionsGeneral": "Transactions"
+        })
+
+        return jsonify({
+            'success': True,
+            'data': df_to_json(general_df)
+        })
+
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 # YEARLY GROWTH
