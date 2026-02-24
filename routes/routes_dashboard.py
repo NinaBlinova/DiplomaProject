@@ -103,8 +103,18 @@ def get_taxpayer(inn):
 @dashboard_bp.route('/monthly/<inn>', methods=['GET'])
 def get_monthly(inn):
     try:
+        year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn)
-        return handle_df_response(df)
+        df = df.rename(columns={
+            "TotalIncome": "Income",
+            "TotalTax": "Tax",
+            "TotalTransactions": "Transactions"
+        })
+        result = df
+        if year:
+            result = df[df["Year"] >= year]
+
+        return handle_df_response(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -112,8 +122,12 @@ def get_monthly(inn):
 @dashboard_bp.route('/yearly/totals/<inn>', methods=['GET'])
 def get_yearly_totals(inn):
     try:
+        year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn)
-        return handle_df_response(df, lambda x: aggregator.aggregate_yearly(x, "sum"))
+        result = aggregator.aggregate_yearly(df, "sum")
+        if year:
+            result = result[result["Year"] >= year]
+        return handle_df_response(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -122,8 +136,12 @@ def get_yearly_totals(inn):
 @dashboard_bp.route('/yearly/median/<inn>', methods=['GET'])
 def get_yearly_median_inn(inn):
     try:
+        year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn)
-        return handle_df_response(df, lambda x: aggregator.aggregate_yearly(x, "median"))
+        result = aggregator.aggregate_yearly(df, "median")
+        if year:
+            result = result[result["Year"] >= year]
+        return handle_df_response(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -232,13 +250,14 @@ def get_monthly_general_all(tax_type):
 @dashboard_bp.route('/yearly/growth/<inn>', methods=['GET'])
 def get_yearly_growth_inn(inn):
     try:
+        year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn)
-        return handle_df_response(
-            df,
-            lambda x: aggregator.calculate_growth(
-                aggregator.aggregate_yearly(x, "median")
-            )
+        result = aggregator.calculate_growth(
+            aggregator.aggregate_yearly(df, "median")
         )
+        if year:
+            result = result[result["Year"] >= year]
+        return handle_df_response(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
