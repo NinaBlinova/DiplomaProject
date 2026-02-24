@@ -13,6 +13,7 @@ db_engine = DatabaseEngine()
 repo = TaxpayerRepository(db_engine)
 service = TaxpayerService(repo)
 
+
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (np.integer, np.int64, np.int32)):
@@ -29,17 +30,11 @@ class NpEncoder(json.JSONEncoder):
 
 
 def map_taxpayer_to_user(row):
-    """
-    Преобразование строки БД в формат,
-    который ожидает фронтенд (User)
-    """
-    # Конвертируем numpy типы в стандартные Python типы
     taxpayer_id = int(row["TaxpayerId"]) if isinstance(row["TaxpayerId"], (np.integer, np.int64)) else row["TaxpayerId"]
     has_employees = bool(row["has_employees"]) if isinstance(row["has_employees"], (np.bool_, bool)) else row[
         "has_employees"]
     employees_count = int(row["employees_count"]) if row["employees_count"] and not pd.isna(
         row["employees_count"]) else None
-
     return {
         "id": taxpayer_id,
         "name": str(row["FullName"]),
@@ -53,11 +48,30 @@ def map_taxpayer_to_user(row):
     }
 
 
+def map_taxpayer_details(row):
+    taxpayer_id = int(row["TaxpayerId"]) if isinstance(row["TaxpayerId"], (np.integer, np.int64)) else row["TaxpayerId"]
+    has_employees = bool(row["has_employees"]) if isinstance(row["has_employees"], (np.bool_, bool)) else row[
+        "has_employees"]
+    employees_count = int(row["employees_count"]) if row["employees_count"] and not pd.isna(
+        row["employees_count"]) else None
+    return {
+        "id": taxpayer_id,
+        "name": str(row["FullName"]),
+        "passport": str(row["PassportNumber"]),
+        "INN": str(row["INN"]),
+        "TaxpayerType": str(row["TaxpayerType"]),
+        "activity_type": str(row["activity_type"]),
+        "registration_district": str(row["registration_district"]),
+        "has_employees": has_employees,
+        "employees_count": employees_count,
+        "avatar": {
+            "src": f"https://api.dicebear.com/7.x/initials/svg?seed={str(row['FullName'])}"
+        }
+    }
+
+    
 @routes_taxpayer.route('/api/taxpayers', methods=['GET'])
 def get_taxpayers():
-    """
-    Получить налогоплательщиков с пагинацией и фильтрацией
-    """
     try:
         # Параметры запроса
         page = int(request.args.get('page', 1))
@@ -91,7 +105,6 @@ def get_taxpayers():
             'totalPages': int(result['total_pages'])
         }
 
-        # Используем собственный JSON encoder для обработки numpy типов
         return jsonify(response_data), 200
 
     except Exception as e:
@@ -103,13 +116,10 @@ def get_taxpayers():
 
 @routes_taxpayer.route('/api/taxpayers/<string:inn>', methods=['GET'])
 def get_taxpayer_by_inn(inn):
-    """
-    Получить налогоплательщика по ИНН
-    """
-    df = service.get_taxpayer_by_inn(inn)
+    df = repo.get_taxpayer_by_inn_raw(inn)
 
     if df.empty:
         return jsonify({"error": "Taxpayer not found"}), 404
 
-    taxpayer = map_taxpayer_to_user(df.iloc[0])
+    taxpayer = map_taxpayer_details(df.iloc[0])
     return jsonify(taxpayer), 200
