@@ -10,20 +10,21 @@ logger = logging.getLogger(__name__)
 
 class ForecastService:
 
-    def __init__(self, models_path=None):
+    def __init__(self, model_name, model_version, models_path=None):
         if models_path is None:
-            models_path = r"C:\Users\blino\DiplomaProject\model\regression\Linear regression\\"
+            models_path = r"C:\Users\blino\DiplomaProject\model\regression"
 
         self.models_path = models_path
-        self.model_version = "linear_regression_v1.0"
+        self.model_name = model_name
+        self.model_version = model_version
         self.load_models()
 
     def load_models(self):
         """Loading models ML"""
         try:
-            self.income_model = joblib.load(f"{self.models_path}linear_income_model.pkl")
-            self.transactions_model = joblib.load(f"{self.models_path}linear_transactions_model.pkl")
-            self.tax_model = joblib.load(f"{self.models_path}linear_tax_model.pkl")
+            self.income_model = joblib.load(rf"{self.models_path}\Linear regression/linear_income_model.pkl")
+            self.transactions_model = joblib.load(rf"{self.models_path}\Linear regression/linear_transactions_model.pkl")
+            self.tax_model = joblib.load(rf"{self.models_path}\Linear regression/linear_tax_model.pkl")
             logger.info("Models loaded successfully")
         except Exception as e:
             logger.error(f"Error loading models: {e}")
@@ -116,22 +117,19 @@ class ForecastService:
 
         return future_df, yearly_summary
 
-    def save_predictions_to_db(self, engine, monthly_df, yearly_df):
+    def save_predictions_to_db(self, engine, monthly_df, yearly_df=None):
         """
-            Save monthly (and optionally yearly) forecasts into the Predict table.
-            Deletes only data for the forecast year (not full table).
+        Save monthly forecasts into Predict table.
+        Checks if a forecast for the same year and model already exists.
 
-            Parameters:
-            -----------
-            engine : SQLAlchemy engine
-                Connection to the database.
-            monthly_df : pd.DataFrame
-                Monthly forecast with columns:
-                ['TaxpayerId', 'FullName', 'INN', 'Year', 'Month', 'PredictedIncome',
-                 'PredictedTransactions', 'PredictedTax', 'TaxType', 'TaxpayerType',
-                 'activity_type', 'registration_district', 'has_employees', 'employees_count']
-            yearly_df : pd.DataFrame, optional
-                Yearly summary data (can be ignored if only monthly data is needed)
+        Parameters
+        ----------
+        engine : SQLAlchemy engine
+            Database connection
+        monthly_df : pd.DataFrame
+            Monthly forecast
+        yearly_df : pd.DataFrame, optional
+            Yearly summary (ignored here)
         """
         monthly_save_df = monthly_df.rename(columns={
             'PredictedIncome': 'Income',
@@ -139,36 +137,51 @@ class ForecastService:
             'PredictedTax': 'Tax'
         })
 
+        monthly_save_df["ModelName"] = self.model_name
+        monthly_save_df["ModelVersion"] = self.model_version
+
         predict_columns = [
             'TaxpayerId', 'FullName', 'INN', 'Year', 'Month',
             'Income', 'Transactions', 'Tax',
             'TaxType', 'TaxpayerType', 'activity_type',
-            'registration_district', 'has_employees', 'employees_count'
+            'registration_district', 'has_employees', 'employees_count',
+            'ModelName', 'ModelVersion'
         ]
 
-        missing_cols = set(predict_columns) - set(monthly_save_df.columns)
-        for col in missing_cols:
-            monthly_save_df[col] = None
+        for col in predict_columns:
+            if col not in monthly_save_df:
+                monthly_save_df[col] = None
 
         forecast_year = int(monthly_save_df['Year'].iloc[0])
 
-        logger.info(f"Deleting old predictions for Year = {forecast_year}...")
-
         with engine.begin() as conn:
-            conn.execute(
-                text("DELETE FROM Predict WHERE Year = :year"),
-                {"year": forecast_year}
+            exists = conn.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM Predict
+                    WHERE Year = :year
+                      AND ModelName = :model_name
+                      AND ModelVersion = :model_version
+                """),
+                {
+                    "year": forecast_year,
+                    "model_name": self.model_name,
+                    "model_version": self.model_version
+                }
+            ).scalar()
+
+            if exists > 0:
+                logger.info(
+                    f"Forecast already exists for Year={forecast_year}, "
+                    f"Model={self.model_name} {self.model_version}. Skipping save."
+                )
+                return
+
+            monthly_save_df[predict_columns].to_sql(
+                'Predict',
+                con=engine,
+                if_exists='append',
+                index=False
             )
 
-            logger.info("Old data deleted successfully.")
-
-        monthly_save_df[predict_columns].to_sql(
-            'Predict',
-            con=engine,
-            if_exists='append',
-            index=False)
-
-        logger.info(f"Saved {len(monthly_save_df)} monthly predictions to Predict table.")
-
-        if yearly_df is not None:
-            logger.info("Yearly summary not saved in this function, only monthly data is saved.")
+            logger.info(f"Saved {len(monthly_save_df)} monthly predictions for {forecast_year} to Predict table.")

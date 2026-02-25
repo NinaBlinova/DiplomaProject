@@ -57,9 +57,9 @@ class TaxDataRepository:
                     """
         return self.db_engine.execute_query(query, [tax_type])
 
-    def get_monthly_summary(self, column_name, tax_type=None):
+    def get_yearly_summary(self, column_name, tax_type=None):
         """
-        Universal function for getting monthly taxpayer data
+        Universal function for getting yearly taxpayer data
         column_name: 'IncomeAmount', 'transactions_count', 'TaxAmount'
         """
         last_year = self.get_years()  # last year
@@ -126,7 +126,7 @@ class TaxDataRepository:
 
         return self.db_engine.execute_query(query, params)
 
-    def get_predict_data(self):
+    def get_predict_data(self, model_name=None, model_version=None):
         """
             Returns prediction data from Predict table.
             If year is provided, filters by year.
@@ -149,7 +149,21 @@ class TaxDataRepository:
                     employees_count
                 FROM Predict
             """
-        return self.db_engine.execute_query(query)
+        where_clauses = []
+        params = []
+
+        if model_name:
+            where_clauses.append("ModelName = ?")
+            params.append(model_name)
+
+        if model_version:
+            where_clauses.append("ModelVersion = ?")
+            params.append(model_version)
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        return self.db_engine.execute_query(query, params)
 
     def get_monthly_data(
             self,
@@ -266,3 +280,17 @@ class TaxDataRepository:
         df = self.db_engine.execute_query(query, params)
         return None if df.empty else df
 
+    def get_available_models(self):
+        query = """
+            SELECT DISTINCT
+                ModelName,
+                ModelVersion,
+                TargetName,
+                R2,
+                MAE,
+                RMSE,
+                CreatedAt
+            FROM model_metrics
+            ORDER BY CreatedAt DESC
+        """
+        return self.db_engine.execute_query(query)

@@ -16,7 +16,10 @@ dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
-forecaster = ForecastService()
+forecaster = ForecastService(
+    model_name="LinearRegression",
+    model_version="v1.0"
+)
 loader = YearlyGrowthLoader(db_engine, repository, aggregator)
 median_loader = YearlyStatsLoader(db_engine, repository, aggregator)
 general_loader = YearlyStatsLoader(db_engine, repository, aggregator)
@@ -52,7 +55,10 @@ def ensure_prediction_up_to_date():
     if df_real_years.empty:
         return pd.DataFrame()
     last_real_year = int(df_real_years["Year"].max())
-    df_pred = repository.get_predict_data()
+    df_pred = repository.get_predict_data(
+        model_name=forecaster.model_name,
+        model_version=forecaster.model_version
+    )
     if df_pred.empty:
         return create_prediction(last_real_year)
     last_pred_year = int(df_pred["Year"].max())
@@ -84,7 +90,7 @@ def initialize_predictions():
     try:
         print("Checking predictions on startup...")
         df = ensure_prediction_up_to_date()
-        print(f"✅ Prediction check complete. Rows: {len(df)}")
+        print(f"Prediction check complete. Rows: {len(df)}")
     except Exception as e:
         print("Error during prediction initialization:", e)
 

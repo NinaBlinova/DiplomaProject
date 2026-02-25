@@ -7,7 +7,6 @@ from routes.routes_taxpayers import routes_taxpayer
 
 def create_app(test_config=None):
     app = Flask(__name__)
-
     app.secret_key = 'your-very-secret-key'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAME SITE'] = 'Lax'
@@ -18,10 +17,8 @@ def create_app(test_config=None):
     CORS(app)
     app.register_blueprint(routes_taxpayer)
     app.register_blueprint(dashboard_bp)
-
     with app.app_context():
         initialize_predictions()
-
     return app
 
 
