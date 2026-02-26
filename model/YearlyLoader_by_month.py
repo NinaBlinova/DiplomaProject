@@ -4,10 +4,12 @@ from datetime import datetime
 
 class YearlyStatsLoader:
 
-    def __init__(self, db_engine, repository, aggregator):
+    def __init__(self, db_engine, repository, aggregator, model_name, model_version):
         self.db_engine = db_engine
         self.repository = repository
         self.aggregator = aggregator
+        self.model_name = model_name
+        self.model_version = model_version
 
     def _record_exists(self, table_name: str, year: int, month: int, tax_type=None):
 
@@ -17,9 +19,12 @@ class YearlyStatsLoader:
                 FROM dbo.{table_name}
                 WHERE [Year] = ?
                   AND [Month] = ?
+                  AND ModelName = ?
+                  AND ModelVersion = ?
                   AND TaxType IS NULL
             """
-            params = [year, month]
+            params = [year, month, self.model_name, self.model_version]
+
         else:
             query = f"""
                 SELECT COUNT(*) as Cnt
@@ -27,8 +32,11 @@ class YearlyStatsLoader:
                 WHERE [Year] = ?
                   AND [Month] = ?
                   AND TaxType = ?
+                  AND ModelName = ?
+                  AND ModelVersion = ?
             """
-            params = [year, month, tax_type]
+            params = [year, month, tax_type,
+                      self.model_name, self.model_version]
 
         df = self.db_engine.execute_query(query, params)
         return not df.empty and int(df.iloc[0]["Cnt"]) > 0
@@ -84,7 +92,7 @@ class YearlyStatsLoader:
             month = int(row["Month"])
 
             if self._record_exists(table_name, year, month, tax_type):
-                print(f"⚠ Already exists: {year}-{month}, tax_type={tax_type}")
+                print(f"⚠ Already exists for model {self.model_name} {self.model_version}: {year}-{month}")
                 continue
 
             rows_to_insert.append({
@@ -94,6 +102,8 @@ class YearlyStatsLoader:
                 income_col: float(row["Income"]),
                 tax_col: float(row["Tax"]),
                 trans_col: float(row["Transactions"]),
+                "ModelName": self.model_name,
+                "ModelVersion": self.model_version,
                 "CreatedAt": datetime.now()
             })
 

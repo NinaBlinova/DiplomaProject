@@ -123,7 +123,7 @@ def process_model(csv_path, target_name):
     save_metrics_to_db(
         db_engine=db,
         metrics_dict=metrics,
-        model_name="LinearRegression",
+        model_name="LightGBM",
         target_name=target_name,
         dataset_type="test",
         model_version="v1.0"
@@ -132,19 +132,19 @@ def process_model(csv_path, target_name):
 
 # Income
 process_model(
-    r"C:\Users\blino\DiplomaProject\model\regression\Linear regression\linear_income_modelpredictions.csv",
+    r"C:\Users\blino\DiplomaProject\model\regression\LightGBM\linear_income_modelpredictions.csv",
     "Income"
 )
 
 # Transactions
 process_model(
-    r"C:\Users\blino\DiplomaProject\model/regression/Linear regression/linear_transactions_modelpredictions.csv",
+    r"C:\Users\blino\DiplomaProject\model/regression/LightGBM/linear_transactions_modelpredictions.csv",
     "Transactions"
 )
 
 # Tax
 process_model(
-    r"C:\Users\blino\DiplomaProject\model/regression/Linear regression/linear_tax_modelpredictions.csv",
+    r"C:\Users\blino\DiplomaProject\model/regression/LightGBM/linear_tax_modelpredictions.csv",
     "Tax"
 )
 

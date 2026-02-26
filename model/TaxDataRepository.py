@@ -279,18 +279,3 @@ class TaxDataRepository:
 
         df = self.db_engine.execute_query(query, params)
         return None if df.empty else df
-
-    def get_available_models(self):
-        query = """
-            SELECT DISTINCT
-                ModelName,
-                ModelVersion,
-                TargetName,
-                R2,
-                MAE,
-                RMSE,
-                CreatedAt
-            FROM model_metrics
-            ORDER BY CreatedAt DESC
-        """
-        return self.db_engine.execute_query(query)

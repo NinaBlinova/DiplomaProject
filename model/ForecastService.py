@@ -1,5 +1,6 @@
 # services/forecast_service.py
 import joblib
+import os
 import pandas as pd
 from sqlalchemy import text
 import logging
@@ -13,19 +14,48 @@ class ForecastService:
     def __init__(self, model_name, model_version, models_path=None):
         if models_path is None:
             models_path = r"C:\Users\blino\DiplomaProject\model\regression"
-
         self.models_path = models_path
         self.model_name = model_name
         self.model_version = model_version
         self.load_models()
 
+    def prediction_exists(self, engine, year):
+        from sqlalchemy import text
+
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM Predict
+                    WHERE Year = ?
+                      AND ModelName = ?
+                      AND ModelVersion = ?
+                """),
+                [year, self.model_name, self.model_version]
+            ).scalar()
+
+        return result > 0
+
     def load_models(self):
-        """Loading models ML"""
+        """Loading ML models dynamically"""
         try:
-            self.income_model = joblib.load(rf"{self.models_path}\Linear regression/linear_income_model.pkl")
-            self.transactions_model = joblib.load(rf"{self.models_path}\Linear regression/linear_transactions_model.pkl")
-            self.tax_model = joblib.load(rf"{self.models_path}\Linear regression/linear_tax_model.pkl")
-            logger.info("Models loaded successfully")
+            base_path = os.path.join(
+                self.models_path,
+                self.model_name
+            )
+
+            self.income_model = joblib.load(
+                os.path.join(base_path, "linear_income_model.pkl")
+            )
+            self.transactions_model = joblib.load(
+                os.path.join(base_path, "linear_transactions_model.pkl")
+            )
+            self.tax_model = joblib.load(
+                os.path.join(base_path, "linear_tax_model.pkl")
+            )
+            logger.info(
+                f"Loaded {self.model_name} version {self.model_version}"
+            )
         except Exception as e:
             logger.error(f"Error loading models: {e}")
             raise
@@ -51,25 +81,8 @@ class ForecastService:
         return df[features]
 
     def predict_for_taxpayers(self, taxpayers_df, target_year):
-        """
-        Forecast for all taxpayers
-
-        Parameters:
-        -----------
-        taxpayers_df : DataFrame
-            Necessary data from taxpayers
-        target_year : int
-            Year to predict for
-
-        Returns:
-        --------
-        tuple: (monthly_forecast_df, yearly_summary_df)
-        """
-
         logger.info(f"Starting prediction for {len(taxpayers_df)} taxpayers for year {target_year}")
-
         future_rows = []
-
         for _, taxpayer in taxpayers_df.iterrows():
             for month in range(1, 13):
                 future_rows.append({
@@ -88,21 +101,16 @@ class ForecastService:
                 })
 
         future_df = pd.DataFrame(future_rows)
-
         X_future = self.prepare_features(future_df)
-
         # Forecast
         future_df['PredictedIncome'] = self.income_model.predict(X_future)
         future_df['PredictedTransactions'] = self.transactions_model.predict(X_future)
         future_df['PredictedTax'] = self.tax_model.predict(X_future)
-
         cols_to_clip = ['PredictedIncome', 'PredictedTransactions', 'PredictedTax']
         future_df[cols_to_clip] = future_df[cols_to_clip].clip(lower=0)
-
         future_df['PredictedIncome'] = future_df['PredictedIncome'].round(2)
         future_df['PredictedTransactions'] = future_df['PredictedTransactions'].round(0).astype(int)
         future_df['PredictedTax'] = future_df['PredictedTax'].round(2)
-
         yearly_summary = future_df.groupby(
             ['TaxpayerId', 'FullName', 'INN']
         ).agg(
@@ -110,27 +118,11 @@ class ForecastService:
             TotalPredictedTransactions=('PredictedTransactions', 'sum'),
             TotalPredictedTax=('PredictedTax', 'sum')
         ).reset_index()
-
         yearly_summary['Year'] = target_year
-
         logger.info(f"Prediction completed. Generated {len(future_df)} monthly records")
-
         return future_df, yearly_summary
 
     def save_predictions_to_db(self, engine, monthly_df, yearly_df=None):
-        """
-        Save monthly forecasts into Predict table.
-        Checks if a forecast for the same year and model already exists.
-
-        Parameters
-        ----------
-        engine : SQLAlchemy engine
-            Database connection
-        monthly_df : pd.DataFrame
-            Monthly forecast
-        yearly_df : pd.DataFrame, optional
-            Yearly summary (ignored here)
-        """
         monthly_save_df = monthly_df.rename(columns={
             'PredictedIncome': 'Income',
             'PredictedTransactions': 'Transactions',
@@ -159,15 +151,11 @@ class ForecastService:
                 text("""
                     SELECT COUNT(*) 
                     FROM Predict
-                    WHERE Year = :year
-                      AND ModelName = :model_name
-                      AND ModelVersion = :model_version
+                    WHERE Year = ?
+                      AND ModelName = ?
+                      AND ModelVersion = ?
                 """),
-                {
-                    "year": forecast_year,
-                    "model_name": self.model_name,
-                    "model_version": self.model_version
-                }
+                [forecast_year, self.model_name, self.model_version]
             ).scalar()
 
             if exists > 0:

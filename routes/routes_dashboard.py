@@ -5,24 +5,21 @@ import numpy as np
 import pandas as pd
 from flask import Blueprint, jsonify, request
 from model.AggregationService import AggregationService
-from model.ForecastService import ForecastService, logger
 from model.TaxDataRepository import TaxDataRepository
 from model.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
 from model.YearlyGrowthLoader import YearlyGrowthLoader
+from routes.routes_models import get_current_model_info
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
 db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
-forecaster = ForecastService(
-    model_name="LinearRegression",
-    model_version="v1.0"
-)
-loader = YearlyGrowthLoader(db_engine, repository, aggregator)
-median_loader = YearlyStatsLoader(db_engine, repository, aggregator)
-general_loader = YearlyStatsLoader(db_engine, repository, aggregator)
+model_name, model_version = get_current_model_info()
+loader = YearlyGrowthLoader(db_engine, repository, aggregator, model_name, model_version)
+median_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
+general_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
 
 
 # support function
@@ -50,49 +47,12 @@ def df_to_json(df):
     )
 
 
-def ensure_prediction_up_to_date():
-    df_real_years = repository.get_years()
-    if df_real_years.empty:
-        return pd.DataFrame()
-    last_real_year = int(df_real_years["Year"].max())
-    df_pred = repository.get_predict_data(
-        model_name=forecaster.model_name,
-        model_version=forecaster.model_version
-    )
-    if df_pred.empty:
-        return create_prediction(last_real_year)
-    last_pred_year = int(df_pred["Year"].max())
-    if last_pred_year > last_real_year:
-        return df_pred
-    return create_prediction(last_real_year)
-
-
-def create_prediction(last_real_year):
-    taxpayers_df = repository.get_taxpayers()
-    next_year = last_real_year + 1
-    forecast_df, yearly_summary_df = forecaster.predict_for_taxpayers(
-        taxpayers_df, next_year
-    )
-    engine = repository.db_engine.get_engine()
-    forecaster.save_predictions_to_db(engine, forecast_df, yearly_summary_df)
-    return forecast_df
-
-
 def handle_df_response(df, transform=None):
     if df is None or df.empty:
         return jsonify({'success': False, 'error': 'No data found'}), 404
     if transform:
         df = transform(df)
     return jsonify({'success': True, 'data': df_to_json(df)})
-
-
-def initialize_predictions():
-    try:
-        print("Checking predictions on startup...")
-        df = ensure_prediction_up_to_date()
-        print(f"Prediction check complete. Rows: {len(df)}")
-    except Exception as e:
-        print("Error during prediction initialization:", e)
 
 
 # TAXPAYER INFO
@@ -202,7 +162,7 @@ def get_monthly_median_all(tax_type):
         }), 500
 
 
-@dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'],  strict_slashes=False)
+@dashboard_bp.route('/monthly/general', defaults={'tax_type': None}, methods=['GET'], strict_slashes=False)
 @dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_general_all(tax_type):
     try:
@@ -364,27 +324,6 @@ def get_yearly_growth_median(tax_type):
             'success': False,
             'error': str(e)
         }), 500
-
-
-# PREDICTION
-@dashboard_bp.route('/predict_inn/<inn>', methods=['GET'])
-def get_prediction_inn(inn):
-    try:
-        taxpayer = repository.get_taxpayer(inn)
-        if taxpayer.empty:
-            return jsonify({'success': False, 'error': 'Taxpayer not found'}), 404
-        monthly_df = repository.get_monthly_by_inn(inn)
-        if monthly_df.empty:
-            return jsonify({'success': False, 'error': 'No historical data'}), 404
-        last_year = int(monthly_df["Year"].max())
-        prediction_df, _ = forecaster.predict_for_taxpayers(taxpayer, last_year + 1)
-        return jsonify({
-            'success': True,
-            'prediction_year': last_year + 1,
-            'data': df_to_json(prediction_df)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @dashboard_bp.route('/predict_generale/result', methods=['GET'])
