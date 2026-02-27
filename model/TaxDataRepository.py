@@ -88,7 +88,7 @@ class TaxDataRepository:
         query = "SELECT * FROM Taxpayer WHERE INN = ?"
         return self.db_engine.execute_query(query, [inn])
 
-    def get_monthly_by_inn(self, inn: str, start_year=None, end_year=None):
+    def get_monthly_by_inn(self, inn: str, start_year=None, end_year=None, model_name=None, model_version=None):
         query = """
             SELECT 
                 m.Year,
@@ -121,6 +121,14 @@ class TaxDataRepository:
         if end_year is not None:
             query += " AND Year <= ?"
             params.append(end_year)
+
+        if model_name is not None:
+            query += " AND ModelName = ?"
+            params.append(model_name)
+
+        if model_version is not None:
+            query += " AND ModelVersion = ?"
+            params.append(model_version)
 
         query += " ORDER BY Year, Month"
 
@@ -242,7 +250,10 @@ class TaxDataRepository:
             tax_type=None,
             has_month=False,
             start_year=None,
-            end_year=None
+            end_year=None,
+            model_name=None,
+            model_version=None
+
     ):
         where_clauses = []
         params = []
@@ -253,6 +264,14 @@ class TaxDataRepository:
         else:
             where_clauses.append("TaxType = ?")
             params.append(tax_type)
+
+        if model_name:
+            where_clauses.append("ModelName = ?")
+            params.append(model_name)
+
+        if model_version:
+            where_clauses.append("ModelVersion = ?")
+            params.append(model_version)
 
         # Year filters
         if start_year is not None:

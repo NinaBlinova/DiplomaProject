@@ -71,7 +71,7 @@ def map_taxpayer_details(row):
 
     
 @routes_taxpayer.route('/api/taxpayers', methods=['GET'])
-def get_taxpayers():
+def get_taxpayers_api():
     try:
         # Параметры запроса
         page = int(request.args.get('page', 1))

@@ -17,6 +17,7 @@ db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
 model_name, model_version = get_current_model_info()
+print(model_name, model_version)
 loader = YearlyGrowthLoader(db_engine, repository, aggregator, model_name, model_version)
 median_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
 general_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
@@ -70,7 +71,8 @@ def get_taxpayer(inn):
 def get_monthly(inn):
     try:
         year = request.args.get('year', type=int)
-        df = repository.get_monthly_by_inn(inn)
+        df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
+        print(f'/monthly/<inn> {df}')
         df = df.rename(columns={
             "TotalIncome": "Income",
             "TotalTax": "Tax",
@@ -89,7 +91,8 @@ def get_monthly(inn):
 def get_yearly_totals(inn):
     try:
         year = request.args.get('year', type=int)
-        df = repository.get_monthly_by_inn(inn)
+        df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
+        print(f'total {df}')
         result = aggregator.aggregate_yearly(df, "sum")
         if year:
             result = result[result["Year"] >= year]
@@ -103,7 +106,8 @@ def get_yearly_totals(inn):
 def get_yearly_median_inn(inn):
     try:
         year = request.args.get('year', type=int)
-        df = repository.get_monthly_by_inn(inn)
+        df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
+        print(f'median {df}')
         result = aggregator.aggregate_yearly(df, "median")
         if year:
             result = result[result["Year"] >= year]
@@ -123,7 +127,9 @@ def get_monthly_median_all(tax_type):
             tax_type,
             has_month=True,
             start_year=start_year,
-            end_year=end_year
+            end_year=end_year,
+            model_name=model_name,
+            model_version=model_version
         )
 
         if median_df is None:
@@ -135,7 +141,9 @@ def get_monthly_median_all(tax_type):
                 tax_type,
                 has_month=True,
                 start_year=start_year,
-                end_year=end_year
+                end_year=end_year,
+                model_name=model_name,
+                model_version=model_version
             )
 
             if median_df is None:
@@ -173,7 +181,9 @@ def get_monthly_general_all(tax_type):
             tax_type,
             has_month=True,
             start_year=start_year,
-            end_year=end_year
+            end_year=end_year,
+            model_name=model_name,
+            model_version=model_version
         )
 
         if general_df is None:
@@ -185,7 +195,9 @@ def get_monthly_general_all(tax_type):
                 tax_type,
                 has_month=True,
                 start_year=start_year,
-                end_year=end_year
+                end_year=end_year,
+                model_name=model_name,
+                model_version=model_version
             )
 
             if general_df is None:
@@ -239,7 +251,9 @@ def get_yearly_growth_general(tax_type):
             tax_type,
             has_month=False,
             start_year=start_year,
-            end_year=end_year
+            end_year=end_year,
+            model_name=model_name,
+            model_version=model_version
         )
 
         if gr is None:
@@ -250,7 +264,9 @@ def get_yearly_growth_general(tax_type):
                 tax_type,
                 has_month=False,
                 start_year=start_year,
-                end_year=end_year
+                end_year=end_year,
+                model_name=model_name,
+                model_version=model_version
             )
             if gr is None:
                 return jsonify({
@@ -289,7 +305,9 @@ def get_yearly_growth_median(tax_type):
             tax_type,
             has_month=False,
             start_year=start_year,
-            end_year=end_year
+            end_year=end_year,
+            model_name=model_name,
+            model_version=model_version
         )
         if gr is None:
             print("No data. Run YearlyGrowthLoader...")
@@ -299,7 +317,9 @@ def get_yearly_growth_median(tax_type):
                 tax_type,
                 has_month=False,
                 start_year=start_year,
-                end_year=end_year
+                end_year=end_year,
+                model_name=model_name,
+                model_version=model_version
             )
             if gr is None:
                 return jsonify({

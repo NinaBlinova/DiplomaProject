@@ -7,7 +7,6 @@ from model.database import DatabaseEngine
 
 models_bp = Blueprint('models', __name__, url_prefix='/api/models')
 
-# --- Setup ---
 db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 
@@ -24,7 +23,7 @@ def ensure_prediction_up_to_date():
         return pd.DataFrame()
 
     last_real_year = int(df_real_years["Year"].max())
-    engine = repository.db_engine.get_engine()
+    engine = repository.db_engine
 
     next_year = last_real_year + 1
     df_pred = repository.get_predict_data(
@@ -33,27 +32,28 @@ def ensure_prediction_up_to_date():
     )
     if df_pred.empty or not forecaster.prediction_exists(engine, next_year):
         logger.info(f"No prediction for {next_year}, generating...")
-        df_pred = create_prediction(next_year - 1)  # last_real_year
+        df_pred = create_prediction(last_real_year)
     else:
         logger.info(f"Prediction already exists for year {next_year}")
-
     return df_pred
 
 
 def create_prediction(last_real_year):
     taxpayers_df = repository.get_taxpayers()
     next_year = last_real_year + 1
-    engine = repository.db_engine.get_engine()
+    engine = repository.db_engine
+    print(next_year)
     if forecaster.prediction_exists(engine, next_year):
         logger.info(f"Forecast already exists for year {next_year}, skipping prediction.")
         return repository.get_predict_data(
             model_name=forecaster.model_name,
             model_version=forecaster.model_version
         )
-    forecast_df, yearly_summary_df = forecaster.predict_for_taxpayers(
+    forecast_df, yearly_summary = forecaster.predict_for_taxpayers(
         taxpayers_df, next_year
     )
-    forecaster.save_predictions_to_db(engine, forecast_df, yearly_summary_df)
+    print(forecast_df)
+    forecaster.save_predictions_to_db(engine, forecast_df)
     return forecast_df
 
 
@@ -81,11 +81,10 @@ def df_to_json(df):
 
 def initialize_predictions():
     try:
-        print("Checking predictions on startup...")
         df = ensure_prediction_up_to_date()
         print(f"Prediction check complete. Rows: {len(df)}")
     except Exception as e:
-        print("Error during prediction initialization:", e)
+        logger.error("Error during prediction initialization", exc_info=True)
 
 
 def get_current_model_info():

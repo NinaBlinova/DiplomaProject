@@ -1,6 +1,8 @@
 # services/forecast_service.py
 import joblib
 import os
+
+import numpy as np
 import pandas as pd
 from sqlalchemy import text
 import logging
@@ -19,22 +21,20 @@ class ForecastService:
         self.model_version = model_version
         self.load_models()
 
-    def prediction_exists(self, engine, year):
-        from sqlalchemy import text
-
-        with engine.connect() as conn:
-            result = conn.execute(
-                text("""
-                    SELECT COUNT(*) 
-                    FROM Predict
-                    WHERE Year = ?
-                      AND ModelName = ?
-                      AND ModelVersion = ?
-                """),
-                [year, self.model_name, self.model_version]
-            ).scalar()
-
-        return result > 0
+    def prediction_exists(self, db_engine, year):
+        """Check if prediction already exists in Predict table"""
+        query = """
+            SELECT COUNT(*) 
+            FROM Predict
+            WHERE Year = ?
+              AND ModelName = ?
+              AND ModelVersion = ?
+        """
+        result = db_engine.execute_query(query, [year, self.model_name, self.model_version])
+        print(result)
+        if result.empty:
+            return False
+        return int(result.iloc[0, 0]) > 0
 
     def load_models(self):
         """Loading ML models dynamically"""
@@ -122,7 +122,7 @@ class ForecastService:
         logger.info(f"Prediction completed. Generated {len(future_df)} monthly records")
         return future_df, yearly_summary
 
-    def save_predictions_to_db(self, engine, monthly_df, yearly_df=None):
+    def save_predictions_to_db(self, engine, monthly_df):
         monthly_save_df = monthly_df.rename(columns={
             'PredictedIncome': 'Income',
             'PredictedTransactions': 'Transactions',
@@ -140,36 +140,62 @@ class ForecastService:
             'ModelName', 'ModelVersion'
         ]
 
+        monthly_save_df = monthly_save_df[predict_columns]
+
         for col in predict_columns:
             if col not in monthly_save_df:
                 monthly_save_df[col] = None
 
         forecast_year = int(monthly_save_df['Year'].iloc[0])
 
-        with engine.begin() as conn:
-            exists = conn.execute(
-                text("""
-                    SELECT COUNT(*) 
-                    FROM Predict
-                    WHERE Year = ?
-                      AND ModelName = ?
-                      AND ModelVersion = ?
-                """),
-                [forecast_year, self.model_name, self.model_version]
-            ).scalar()
 
-            if exists > 0:
-                logger.info(
-                    f"Forecast already exists for Year={forecast_year}, "
-                    f"Model={self.model_name} {self.model_version}. Skipping save."
-                )
-                return
+        monthly_save_df['Income'] = monthly_save_df['Income'].fillna(0).round(2).astype(float)
+        monthly_save_df['Tax'] = monthly_save_df['Tax'].fillna(0).round(2).astype(float)
+        monthly_save_df['Transactions'] = monthly_save_df['Transactions'].fillna(0).round(0).astype(int)
+        monthly_save_df['employees_count'] = (
+            monthly_save_df['employees_count']
+            .replace({np.nan: None})
+        )
 
-            monthly_save_df[predict_columns].to_sql(
-                'Predict',
-                con=engine,
-                if_exists='append',
-                index=False
+        print("MAX VALUES:")
+        print("Income max:", monthly_save_df['Income'].max())
+        print("Tax max:", monthly_save_df['Tax'].max())
+        print("Transactions max:", monthly_save_df['Transactions'].max())
+        print("employees_count max:", monthly_save_df['employees_count'].max())
+        print("employees_count min:", monthly_save_df['employees_count'].min())
+
+
+        print(monthly_save_df.head(5).to_string())
+        pd.DataFrame({monthly_save_df.to_csv(f"predictions.csv", index=False)})
+
+        if self.prediction_exists(engine, forecast_year):
+            logger.info(
+                f"Forecast already exists for Year={forecast_year}, Model={self.model_name} {self.model_version}. Skipping save."
             )
+            return
 
-            logger.info(f"Saved {len(monthly_save_df)} monthly predictions for {forecast_year} to Predict table.")
+        try:
+            conn = engine.get_engine().raw_connection()
+            cursor = conn.cursor()
+            cursor.fast_executemany = True
+
+            batch_size = 10000
+            for start in range(0, len(monthly_save_df), batch_size):
+                end = start + batch_size
+                batch_data = [tuple(row[col] for col in predict_columns)
+                              for _, row in monthly_save_df.iloc[start:end].iterrows()]
+                cursor.executemany("""
+                    INSERT INTO Predict
+                    (TaxpayerId, FullName, INN, Year, Month,
+                     Income, Transactions, Tax,
+                     TaxType, TaxpayerType, activity_type, registration_district,
+                     has_employees, employees_count,
+                     ModelName, ModelVersion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, batch_data)
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error saving predictions to DB: {e}")
+            raise
