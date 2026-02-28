@@ -22,7 +22,7 @@ class NpEncoder(json.JSONEncoder):
             return float(obj)
         if isinstance(obj, (np.ndarray,)):
             return obj.tolist()
-        if isinstance(obj, (np.bool_)):
+        if isinstance(obj, np.bool_):
             return bool(obj)
         if pd.isna(obj):
             return None

@@ -1,27 +1,43 @@
 import json
-import time
-
 import numpy as np
 import pandas as pd
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from model.AggregationService import AggregationService
 from model.TaxDataRepository import TaxDataRepository
 from model.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
 from model.YearlyGrowthLoader import YearlyGrowthLoader
-from routes.routes_models import get_current_model_info
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
 db_engine = DatabaseEngine()
 repository = TaxDataRepository(db_engine)
 aggregator = AggregationService()
-model_name, model_version = get_current_model_info()
-print(model_name, model_version)
-loader = YearlyGrowthLoader(db_engine, repository, aggregator, model_name, model_version)
-median_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
-general_loader = YearlyStatsLoader(db_engine, repository, aggregator, model_name, model_version)
-
+def get_loaders():
+    model_name = current_app.config["ACTIVE_MODEL_NAME"]
+    model_version = current_app.config["ACTIVE_MODEL_VERSION"]
+    loader = YearlyGrowthLoader(
+        db_engine,
+        repository,
+        aggregator,
+        model_name,
+        model_version
+    )
+    median_loader = YearlyStatsLoader(
+        db_engine,
+        repository,
+        aggregator,
+        model_name,
+        model_version
+    )
+    general_loader = YearlyStatsLoader(
+        db_engine,
+        repository,
+        aggregator,
+        model_name,
+        model_version
+    )
+    return model_name, model_version, loader, median_loader, general_loader
 
 # support function
 def convert_numpy_types(obj):
@@ -70,6 +86,7 @@ def get_taxpayer(inn):
 @dashboard_bp.route('/monthly/<inn>', methods=['GET'])
 def get_monthly(inn):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
         print(f'/monthly/<inn> {df}')
@@ -90,6 +107,7 @@ def get_monthly(inn):
 @dashboard_bp.route('/yearly/totals/<inn>', methods=['GET'])
 def get_yearly_totals(inn):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
         print(f'total {df}')
@@ -105,6 +123,7 @@ def get_yearly_totals(inn):
 @dashboard_bp.route('/yearly/median/<inn>', methods=['GET'])
 def get_yearly_median_inn(inn):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         year = request.args.get('year', type=int)
         df = repository.get_monthly_by_inn(inn, model_name=model_name, model_version=model_version)
         print(f'median {df}')
@@ -120,6 +139,7 @@ def get_yearly_median_inn(inn):
 @dashboard_bp.route('/monthly/median/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_median_all(tax_type):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         start_year = request.args.get("startYear", type=int)
         end_year = request.args.get("endYear", type=int)
         median_df = repository.get_yearly_growth_by_type(
@@ -174,6 +194,7 @@ def get_monthly_median_all(tax_type):
 @dashboard_bp.route('/monthly/general/<tax_type>', methods=['GET'], strict_slashes=False)
 def get_monthly_general_all(tax_type):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         start_year = request.args.get("startYear", type=int)
         end_year = request.args.get("endYear", type=int)
         general_df = repository.get_yearly_growth_by_type(
@@ -244,6 +265,7 @@ def get_yearly_growth_inn(inn):
 @dashboard_bp.route('/yearly/growth/general/<tax_type>', methods=['GET'])
 def get_yearly_growth_general(tax_type):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         start_year = request.args.get("startYear", type=int)
         end_year = request.args.get("endYear", type=int)
         gr = repository.get_yearly_growth_by_type(
@@ -298,6 +320,7 @@ def get_yearly_growth_general(tax_type):
 @dashboard_bp.route('/yearly/growth/median/<tax_type>', methods=['GET'])
 def get_yearly_growth_median(tax_type):
     try:
+        model_name, model_version, loader, median_loader, general_loader = get_loaders()
         start_year = request.args.get("startYear", type=int)
         end_year = request.args.get("endYear", type=int)
         gr = repository.get_yearly_growth_by_type(
