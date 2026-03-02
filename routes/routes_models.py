@@ -124,7 +124,6 @@ def get_models_api():
     try:
         available_models = repository_model.get_available_models()
         return handle_df_response(available_models)
-
     except Exception as e:
         logger.error(f"Error getting available models {e}", exc_info=True)
 
@@ -135,15 +134,14 @@ def set_active_model():
         data = request.json
         model_name = data.get("ModelName")
         model_version = data.get("ModelVersion")
-
         if not model_name or not model_version:
             return jsonify({"success": False, "error": "Invalid data"}), 400
-
         current_app.config["ACTIVE_MODEL_NAME"] = model_name
         current_app.config["ACTIVE_MODEL_VERSION"] = model_version
-
-        print('model is changing')
-
+        current_app.forecaster = ForecastService(
+            model_name=model_name,
+            model_version=model_version
+        )
         return jsonify({
             "success": True,
             "active_model": {
@@ -161,14 +159,21 @@ def get_model_info_api():
     try:
         model_name = request.args.get("ModelName")
         model_version = request.args.get("ModelVersion")
-
         if not model_name or not model_version:
             return jsonify({"success": False, "error": "Missing parameters"}), 400
-
         model_info = repository_model.get_model_info(model_name, model_version)
-
         return handle_df_response(model_info)
 
     except Exception as e:
         logger.error(f"Error getting model info {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+@models_bp.route('/active', methods=['GET'])
+def get_active_model():
+    return jsonify({
+        "success": True,
+        "active_model": {
+            "ModelName": current_app.config["ACTIVE_MODEL_NAME"],
+            "ModelVersion": current_app.config["ACTIVE_MODEL_VERSION"]
+        }
+    })

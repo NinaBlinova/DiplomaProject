@@ -13,13 +13,11 @@ from routes.routes_dashboard import dashboard_bp
 from routes.routes_models import models_bp, initialize_predictions
 from routes.routes_taxpayers import routes_taxpayer
 
-
 def create_app(test_config=None):
     app = Flask(__name__)
 
-    app.config["ACTIVE_MODEL_NAME"] = "LightGBM"
+    app.config["ACTIVE_MODEL_NAME"] = "LinearRegression"
     app.config["ACTIVE_MODEL_VERSION"] = "v1.0"
-
     app.secret_key = 'your-very-secret-key'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAME SITE'] = 'Lax'
@@ -32,7 +30,7 @@ def create_app(test_config=None):
     app.db_engine = DatabaseEngine()
     app.tax_repository = TaxDataRepository(app.db_engine)
     app.forecaster = ForecastService(
-        model_name="LightGBM",
+        model_name="LinearRegression",
         model_version="v1.0"
     )
     app.aggregator = AggregationService()
