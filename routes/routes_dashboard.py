@@ -2,11 +2,11 @@ import json
 import numpy as np
 import pandas as pd
 from flask import Blueprint, jsonify, request, current_app
-from model.AggregationService import AggregationService
-from model.TaxDataRepository import TaxDataRepository
-from model.YearlyLoader_by_month import YearlyStatsLoader
+from model.data.taxs.AggregationService import AggregationService
+from model.data.taxs.TaxDataRepository import TaxDataRepository
+from model.data.taxs.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
-from model.YearlyGrowthLoader import YearlyGrowthLoader
+from model.data.taxs.YearlyGrowthLoader import YearlyGrowthLoader
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 

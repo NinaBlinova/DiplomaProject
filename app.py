@@ -3,13 +3,14 @@ import os
 from flask import Flask
 from flask_cors import CORS
 
-from model.AggregationService import AggregationService
-from model.ForecastService import ForecastService
-from model.TaxDataRepository import TaxDataRepository
-from model.YearlyGrowthLoader import YearlyGrowthLoader
-from model.YearlyLoader_by_month import YearlyStatsLoader
+from model.data.taxs.AggregationService import AggregationService
+from model.manegement_models.ForecastService import ForecastService
+from model.data.taxs.TaxDataRepository import TaxDataRepository
+from model.data.taxs.YearlyGrowthLoader import YearlyGrowthLoader
+from model.data.taxs.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
 from routes.routes_dashboard import dashboard_bp
+from routes.routes_login import login_bp
 from routes.routes_models import models_bp, initialize_predictions
 from routes.routes_taxpayers import routes_taxpayer
 
@@ -51,7 +52,7 @@ def create_app(test_config=None):
     app.register_blueprint(routes_taxpayer)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(models_bp)
-
+    app.register_blueprint(login_bp)
     return app
 
 

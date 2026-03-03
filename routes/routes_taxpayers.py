@@ -3,9 +3,9 @@ from flask import Blueprint, jsonify, request
 import json
 import numpy as np
 
-from model.TaxpayerRepository import TaxpayerRepository
+from model.data.taxpayers.TaxpayerRepository import TaxpayerRepository
 from model.database import DatabaseEngine
-from model.TaxpayerService import TaxpayerService
+from model.data.taxpayers.TaxpayerService import TaxpayerService
 
 routes_taxpayer = Blueprint('routes_taxpayer', __name__)
 

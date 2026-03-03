@@ -1,9 +1,9 @@
 import json
 import pandas as pd
 from flask import Blueprint, jsonify, current_app, request
-from model.ForecastService import ForecastService, logger
-from model.ModelsRepository import ModelsRepository
-from model.TaxDataRepository import TaxDataRepository
+from model.manegement_models.ForecastService import ForecastService, logger
+from model.manegement_models.ModelsRepository import ModelsRepository
+from model.data.taxs.TaxDataRepository import TaxDataRepository
 from model.database import DatabaseEngine
 
 models_bp = Blueprint('models', __name__, url_prefix='/api/models')

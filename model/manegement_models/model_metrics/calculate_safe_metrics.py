@@ -132,19 +132,19 @@ def process_model(csv_path, target_name):
 
 # Income
 process_model(
-    r"C:\Users\blino\DiplomaProject\model\regression\LightGBM\linear_income_modelpredictions.csv",
+    r"/model/regression/LightGBM/linear_income_modelpredictions.csv",
     "Income"
 )
 
 # Transactions
 process_model(
-    r"C:\Users\blino\DiplomaProject\model/regression/LightGBM/linear_transactions_modelpredictions.csv",
+    r"/model/regression/LightGBM/linear_transactions_modelpredictions.csv",
     "Transactions"
 )
 
 # Tax
 process_model(
-    r"C:\Users\blino\DiplomaProject\model/regression/LightGBM/linear_tax_modelpredictions.csv",
+    r"/model/regression/LightGBM/linear_tax_modelpredictions.csv",
     "Tax"
 )
 

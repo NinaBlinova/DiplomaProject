@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import pandas as pd
 
 
@@ -46,3 +46,15 @@ class DatabaseEngine:
         if self.engine:
             self.engine.dispose()
             self.engine = None
+
+    def execute_non_query(self, query, params=None):
+        engine = self.get_engine()
+        if engine is None:
+            return False
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(query), params or {})
+            return True
+        except Exception as e:
+            print(f"Request execution error: {e}")
+            return False

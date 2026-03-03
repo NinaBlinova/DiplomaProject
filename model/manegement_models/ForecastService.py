@@ -15,7 +15,8 @@ class ForecastService:
 
     def __init__(self, model_name, model_version, models_path=None):
         if models_path is None:
-            models_path = r"C:\Users\blino\DiplomaProject\model\regression"
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            models_path = os.path.join(base_dir, "regression")
         self.models_path = models_path
         self.model_name = model_name
         self.model_version = model_version
