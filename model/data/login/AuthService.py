@@ -29,11 +29,22 @@ class AuthService:
             return False, "Insert failed"
 
     def login(self, username, password):
-        query = "SELECT * FROM Users WHERE Username = ?"
-        user = self.db.execute_query(query, [username])
-        if user.empty:
-            return False, "User not found"
-        user_data = user.iloc[0]
-        if not check_password_hash(user_data["PasswordHash"], password):
-            return False, "Invalid password"
-        return True, user_data.to_dict()
+        try:
+            query = "SELECT * FROM Users WHERE Username = ?"
+            user = self.db.execute_query(query, [username])
+            if user.empty:
+                print(f"[Login] User not found: {username}")
+                return False, "User not found"
+            user_data = user.iloc[0]
+            password_hash = user_data.get("PasswordHash")
+            if not password_hash:
+                print(f"[Login] PasswordHash missing for user: {username}")
+                return False, "Password hash missing"
+            if not check_password_hash(password_hash, password):
+                print(f"[Login] Invalid password for user: {username}")
+                return False, "Invalid password"
+            return True, user_data.to_dict()
+        except Exception as e:
+            print(f"[AuthService.login] Error: {e}")
+            return False, str(e)
+
