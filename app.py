@@ -12,6 +12,7 @@ from model.database import DatabaseEngine
 from routes.routes_dashboard import dashboard_bp
 from routes.routes_login import login_bp
 from routes.routes_models import models_bp, initialize_predictions
+from routes.routes_setting import setting_bp
 from routes.routes_taxpayers import routes_taxpayer
 
 def create_app(test_config=None):
@@ -53,6 +54,7 @@ def create_app(test_config=None):
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(models_bp)
     app.register_blueprint(login_bp)
+    app.register_blueprint(setting_bp)
     return app
 
 
