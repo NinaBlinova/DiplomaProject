@@ -40,13 +40,16 @@ class UserSettingsService:
         stored_hash = user.iloc[0]["PasswordHash"]
         if not check_password_hash(stored_hash, old_password):
             return False, "Old password incorrect"
-        new_hash = generate_password_hash(new_password)
         update_query = """
         UPDATE Users
-        SET PasswordHash = ?
-        WHERE Id = ?
+        SET PasswordHash = :password
+        WHERE Id = :user_id
         """
-        self.db.execute_query(update_query, [new_hash, user_id])
+        params = {
+            "password": generate_password_hash(new_password),
+            "user_id": user_id
+        }
+        self.db.execute_non_query(update_query, params)
         return True, "Password updated"
 
     def update_users_info(self, user_id, column_name, value):

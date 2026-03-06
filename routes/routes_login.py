@@ -31,7 +31,7 @@ def login():
         return jsonify({"success": False, "message": "Missing credentials"}), 400
     success, result = service.login(username, password)
     if not success:
-        return jsonify({"success": False, "message": result}), 401
+        return jsonify({"success": False, "message": result}), 200
     result.pop("PasswordHash", None)
     result.pop("Avatar", None)
     return jsonify({
