@@ -43,11 +43,13 @@ class UserSettingsService:
         update_query = """
         UPDATE Users
         SET PasswordHash = :password
+        CreatedAt = :createdAt
         WHERE Id = :user_id
         """
         params = {
             "password": generate_password_hash(new_password),
-            "user_id": user_id
+            "user_id": user_id,
+            'createdAt': datetime.datetime.now()
         }
         self.db.execute_non_query(update_query, params)
         return True, "Password updated"
