@@ -9,6 +9,8 @@ from model.data.taxs.TaxDataRepository import TaxDataRepository
 from model.data.taxs.YearlyGrowthLoader import YearlyGrowthLoader
 from model.data.taxs.YearlyLoader_by_month import YearlyStatsLoader
 from model.database import DatabaseEngine
+from routes import routes_dashboard
+from routes.routes_admin import admin_bp
 from routes.routes_dashboard import dashboard_bp
 from routes.routes_login import login_bp
 from routes.routes_models import models_bp, initialize_predictions
@@ -55,6 +57,7 @@ def create_app(test_config=None):
     app.register_blueprint(models_bp)
     app.register_blueprint(login_bp)
     app.register_blueprint(setting_bp)
+    app.register_blueprint(admin_bp)
     return app
 
 

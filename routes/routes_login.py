@@ -7,20 +7,6 @@ login_bp = Blueprint("login_bp", __name__, url_prefix="/api/auth")
 db_engine = DatabaseEngine()
 service = AuthService(db_engine)
 
-# @login_bp.route("/register", methods=["POST"])
-# def register():
-#     data = request.get_json()
-#     username = data.get("username")
-#     email = data.get("email")
-#     password = data.get("password")
-#     full_name = data.get("full_name")
-#     if not all([username, email, password, full_name]):
-#         return jsonify({"success": False, "message": "Missing required fields"}), 400
-#     success, message = service.register(username, email, password, full_name)
-#     if not success:
-#         return jsonify({"success": False, "message": message}), 400
-#     return jsonify({"success": True, "message": message}), 201
-
 
 @login_bp.route("/login", methods=["POST"])
 def login():
@@ -38,3 +24,18 @@ def login():
         "success": True,
         "user": result
     }), 200
+
+@login_bp.route("/logout", methods=["POST"])
+def logout():
+    data = request.get_json(silent=True) or {}
+    username = data.get("username")
+    user_id = data.get("user_id")
+    if username and user_id:
+        service.logger.log_action(
+            user_id=int(user_id),
+            username=username,
+            action="Logout",
+            additional_info="User logged out"
+        )
+    print('User logged out')
+    return jsonify({"success": True, "message": "Logged out"}), 200

@@ -1,12 +1,14 @@
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import text
 import datetime
+
+from model.data.LoggerService import LoggerService
 
 
 class UserSettingsService:
 
     def __init__(self, db_engine):
         self.db = db_engine
+        self.logger = LoggerService(db_engine)
 
     def update_profile(self, user_id, full_name, email, username, bio):
         query = """
@@ -28,6 +30,12 @@ class UserSettingsService:
                 'createdAt': datetime.datetime.now(),
             }
             self.db.execute_non_query(query, params)
+            self.logger.log_action(
+                user_id=user_id,
+                username=username,
+                action="Update Profile",
+                additional_info=f"FullName={full_name}, Email={email}, Bio={bio}"
+            )
             return True, "Profile updated"
         except Exception as e:
             return False, str(e)
@@ -38,6 +46,7 @@ class UserSettingsService:
         if user.empty:
             return False, "User not found"
         stored_hash = user.iloc[0]["PasswordHash"]
+        username = user.iloc[0]["Username"]
         if not check_password_hash(stored_hash, old_password):
             return False, "Old password incorrect"
         update_query = """
@@ -52,15 +61,28 @@ class UserSettingsService:
             'createdAt': datetime.datetime.now()
         }
         self.db.execute_non_query(update_query, params)
+        self.logger.log_action(
+            user_id=user_id,
+            username=username,
+            action="Change Password"
+        )
         return True, "Password updated"
 
     def update_users_info(self, user_id, column_name, value):
+        result = self.db.execute_query("SELECT Username FROM Users WHERE Id = ?", [user_id])
+        username = result.iloc[0]["Username"] if not result.empty else ""
         query = f"UPDATE Users SET {column_name} = :value WHERE Id = :user_id"
         success = self.db.execute_non_query(query, {
             "value": value,
             "user_id": user_id
         })
         if success:
+            self.logger.log_action(
+                user_id=user_id,
+                username=username,
+                action=f"Update {column_name}",
+                additional_info=f"New value: {value}"
+            )
             return True, "Value updated"
         else:
             return False, "Database error"
@@ -73,6 +95,7 @@ class UserSettingsService:
         """
         try:
             result = self.db.execute_query(query, [user_id])
+
             if result.empty:
                 return False, None, "User not found"
             avatar = result.iloc[0]["Avatar"]
@@ -81,11 +104,3 @@ class UserSettingsService:
             return True, avatar, "Avatar loaded"
         except Exception as e:
             return False, None, str(e)
-
-    # def delete_account(self, user_id):
-    #     query = "DELETE FROM Users WHERE Id = ?"
-    #     try:
-    #         self.db.execute_query(query, [user_id])
-    #         return True, "Account deleted"
-    #     except Exception as e:
-    #         return False, str(e)
