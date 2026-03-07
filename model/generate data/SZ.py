@@ -15,7 +15,6 @@ conn = pyodbc.connect(
 )
 cursor = conn.cursor()
 
-# Получаем всех самозанятых
 cursor.execute("""
     SELECT
         t.TaxpayerId,
@@ -26,9 +25,6 @@ cursor.execute("""
 sz_taxpayers = cursor.fetchall()
 print(f"Найдено налогоплательщиков: {len(sz_taxpayers)}")
 
-# print(sz_taxpayers)
-
-# Коэффициенты сезонности для разных сфер
 seasonal_factors = {
     'TRADE': {'Зима': 1.2, 'Весна': 1.0, 'Лето': 0.9, 'Осень': 1.1},  # Зима - выше (новогодние покупки)
     'SERVICES': {'Зима': 1.1, 'Весна': 1.0, 'Лето': 0.8, 'Осень': 1.2},  # Осень - ремонт к зиме
