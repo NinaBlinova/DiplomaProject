@@ -9,7 +9,7 @@ class AdminSettingsService:
         self.db_engine = db_engine
         self.logger = LoggerService(db_engine)
 
-    def delete_account(self, admin_id: int, target_user_id: int):
+    def manage_account(self, admin_id: int, target_user_id: int, is_active: bool):
         admin_query = "SELECT Username FROM Users WHERE Id = ?"
         admin = self.db_engine.execute_query(admin_query, [admin_id])
         if admin.empty:
@@ -23,11 +23,12 @@ class AdminSettingsService:
         user_id = user.iloc[0]["Id"]
         update_query = """
         UPDATE Users
-        SET IsActive = 0
+        SET IsActive = :is_active
         WHERE Id = :user_id
         """
         params = {
-            "user_id": user_id
+            "user_id": int(user_id),
+            "is_active": 1 if is_active else 0
         }
         try:
             self.db_engine.execute_non_query(update_query, params)
@@ -35,10 +36,10 @@ class AdminSettingsService:
                 user_id=admin_id,
                 username=admin_username,
                 action="Admin Deactivated User",
-                additional_info=f"Admin {admin_username} (ID {admin_id}) deactivated user {username} (ID {user_id})"
+                additional_info=f"Admin {admin_username} (ID {admin_id}) set IsActive={params['is_active']} for user {username} (ID {user_id})"
             )
-
-            return True, "Account deactivated"
+            message = "Account activated" if is_active else "Account deactivated"
+            return True, message
         except Exception as e:
             return False, str(e)
 
@@ -92,3 +93,6 @@ class AdminSettingsService:
             return True, "User created successfully"
         except Exception as e:
             return False, str(e)
+
+    def show_history(self):
+        pass

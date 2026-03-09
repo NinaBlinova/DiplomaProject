@@ -6,7 +6,7 @@ class UserRepository:
     def __init__(self, db_engine):
         self.db_engine = db_engine
 
-    def get_users_with_logs(
+    def get_users(
             self,
             username_filter: Optional[str] = None,
             role_filter: Optional[str] = None,
@@ -39,4 +39,20 @@ class UserRepository:
             query += " AND u.IsActive = ?"
             params.append(is_active_filter)
         query += f" ORDER BY {sort_by} {sort_order}"
+        return self.db_engine.execute_query(query, params=params)
+
+    def get_user_log(self, user_id: int, limit: Optional[int] = 100) -> pd.DataFrame:
+        query = f"""
+                SELECT TOP {limit}
+                    Id AS LogId,
+                    UserId,
+                    Username,
+                    Action,
+                    AdditionalInfo,
+                    ActionDate
+                FROM Logs
+                WHERE UserId = ?
+                ORDER BY ActionDate DESC
+            """
+        params = [user_id]
         return self.db_engine.execute_query(query, params=params)
