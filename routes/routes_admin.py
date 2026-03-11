@@ -19,15 +19,27 @@ def get_members():
         members = []
         for _, row in users_df.iterrows():
             members.append({
-                "Id": row["UserId"],
+                "Id": row["Id"],
                 "FullName": row["FullName"],
                 "Username": row["Username"],
                 "Email": row["Email"],
+                "Bio": row["Bio"],
                 "user_role": row["user_role"],
                 "IsActive": row["IsActive"],
-                "CreatedAt": row["CreatedAt"].isoformat(),
+                "CreatedAt": row["CreatedAt"],
+                "PassportSeries": row["PassportSeries"],
+                "PassportNumber": row["PassportNumber"],
+                "PassportIssuedBy": row["PassportIssuedBy"],
+                "PassportIssueDate": row["PassportIssueDate"],
+                "SNILS": row["SNILS"],
+                "INN": row["INN"],
+                "OMSPolicyNumber": row["OMSPolicyNumber"],
+                "BirthDate": row["BirthDate"],
+                "Gender": row["Gender"],
+                "Address_Reg": row["Address_Reg"],
+                "Phone": row["Phone"]
             })
-        print(f'members: {members}')
+        # print(f'members: {members}')
         return jsonify(members), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -64,10 +76,11 @@ def activate_users():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@admin_bp.route("/register", methods=["POST"])
-def register():
+@admin_bp.route("/register_employee", methods=["POST"])
+def register_employee():
     try:
         data = request.get_json()
+        print("Registering employee, birth_date:", data.get("birth_date"))
         admin_id = data.get("admin_id")
         username = data.get("username")
         email = data.get("email")
@@ -75,19 +88,29 @@ def register():
         full_name = data.get("full_name")
         if not all([admin_id, username, email, password, full_name]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
-        # admin_id: int, username: str, email: str, password: str, full_name: str
-        success, message = admin_service.register(
+        success, message = admin_service.register_employee(
             admin_id=int(admin_id),
             username=username,
             email=email,
             password=password,
-            full_name=full_name
+            full_name=full_name,
+            passport_series=data.get("passport_series"),
+            passport_number=data.get("passport_number"),
+            passport_issued_by=data.get("passport_issued_by"),
+            passport_issue_date=data.get("passport_issue_date"),
+            snils=data.get("snils"),
+            inn=data.get("inn"),
+            oms_policy=data.get("oms_policy"),
+
+            birth_date=data.get("birth_date"),
+            gender=data.get("gender"),
+            address_reg=data.get("address_reg"),
+            phone=data.get("phone")
         )
         status_code = 201 if success else 400
         return jsonify({"success": success, "message": message}), status_code
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
-
 
 @admin_bp.route("/user_logs/<int:user_id>", methods=["GET"])
 def get_user_logs(user_id):
@@ -114,16 +137,27 @@ def edit_user():
     try:
         data = request.get_json()
         admin_id = data.get("admin_id")
-        target_user_id = data.get("user_id")
-        updates = data.get("updates")  # dict {"FullName": "...", "Email": "...", "Bio": "..."}
-        if not all([admin_id, target_user_id, updates]):
-            return jsonify({"success": False, "message": "Missing required fields"}), 400
-        results = {}
-        for column, value in updates.items():
-            success, msg = edit_service.update_users_info(target_user_id, column, value)
-            results[column] = {"success": success, "message": msg}
-        overall_success = all(r["success"] for r in results.values())
-        status_code = 200 if overall_success else 400
-        return jsonify({"success": overall_success, "results": results}), status_code
+        user_id = data.get("user_id")
+        if not all([admin_id, user_id]):
+            return jsonify({"success": False, "message": "Missing admin_id or user_id"}), 400
+        success, message = admin_service.update_employee(
+            admin_id=int(admin_id),
+            user_id=int(user_id),
+            email=data.get("email"),
+            full_name=data.get("full_name"),
+            passport_series=data.get("passport_series"),
+            passport_number=data.get("passport_number"),
+            passport_issued_by=data.get("passport_issued_by"),
+            passport_issue_date=data.get("passport_issue_date"),
+            snils=data.get("snils"),
+            inn=data.get("inn"),
+            oms_policy=data.get("oms_policy"),
+            birth_date=data.get("birth_date"),
+            gender=data.get("gender"),
+            address_reg=data.get("address_reg"),
+            phone=data.get("phone")
+        )
+        status_code = 200 if success else 400
+        return jsonify({"success": success, "message": message}), status_code
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500

@@ -54,3 +54,36 @@ def test_login_user_not_found(client):
     assert response.status_code == 401
     data = response.get_json()
     assert data["success"] is False
+
+
+def test_register_employee(client):
+    response = client.post(
+        "/api/admin/register_employee",
+        json={
+            "admin_id": 14,
+            "username": "testemployee",
+            "email": "testemployee@mail.com",
+            "password": "test123",
+            "full_name": "Тестовый Сотрудник",
+            "phone": "+79990000000"
+        }
+    )
+    assert response.status_code in [201, 400]
+    data = response.get_json()
+    assert "success" in data
+    assert "message" in data
+
+
+def test_edit_user(client):
+    response = client.put(
+        "/api/admin/edit_user",
+        json={
+            "admin_id": 14,
+            "user_id": 16,
+            "address_reg": "Москва",
+            "gender": "Женский"
+        }
+    )
+    assert response.status_code in [200, 400]
+    data = response.get_json()
+    assert "success" in data

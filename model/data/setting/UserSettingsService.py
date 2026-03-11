@@ -41,7 +41,7 @@ class UserSettingsService:
             return False, str(e)
 
     def change_password(self, user_id, old_password, new_password):
-        query = "SELECT PasswordHash FROM Users WHERE Id = ?"
+        query = "SELECT PasswordHash, Username FROM Users WHERE Id = ?"
         user = self.db.execute_query(query, [user_id])
         if user.empty:
             return False, "User not found"
@@ -51,7 +51,7 @@ class UserSettingsService:
             return False, "Old password incorrect"
         update_query = """
         UPDATE Users
-        SET PasswordHash = :password
+        SET PasswordHash = :password,
         CreatedAt = :createdAt
         WHERE Id = :user_id
         """

@@ -20,6 +20,7 @@ def login():
         return jsonify({"success": False, "message": result}), 200
     result.pop("PasswordHash", None)
     result.pop("Avatar", None)
+    print(result)
     return jsonify({
         "success": True,
         "user": result
