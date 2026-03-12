@@ -14,6 +14,7 @@ from routes.routes_admin import admin_bp
 from routes.routes_dashboard import dashboard_bp
 from routes.routes_login import login_bp
 from routes.routes_models import models_bp, initialize_predictions
+from routes.routes_reports import report_bp
 from routes.routes_setting import setting_bp
 from routes.routes_taxpayers import routes_taxpayer
 
@@ -58,6 +59,7 @@ def create_app(test_config=None):
     app.register_blueprint(login_bp)
     app.register_blueprint(setting_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(report_bp)
     return app
 
 
