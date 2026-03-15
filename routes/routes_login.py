@@ -35,8 +35,8 @@ def logout():
         service.logger.log_action(
             user_id=int(user_id),
             username=username,
-            action="Logout",
-            additional_info="User logged out"
+            action="Выход из системы",
+            additional_info="Пользователь вышел из ситемы"
         )
     print('User logged out')
     return jsonify({"success": True, "message": "Logged out"}), 200

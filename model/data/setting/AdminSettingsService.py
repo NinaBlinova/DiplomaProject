@@ -34,13 +34,14 @@ class AdminSettingsService:
         }
         try:
             self.db_engine.execute_non_query(update_query, params)
+            action = "Учетная запись активирована" if is_active else "Учетная запись деактивирована"
             self.logger.log_action(
                 user_id=admin_id,
                 username=admin_username,
-                action="Admin Deactivated User",
-                additional_info=f"Admin {admin_username} (ID {admin_id}) set IsActive={params['is_active']} for user {username} (ID {user_id})"
+                action=action,
+                additional_info=f"Администратор {admin_username} (ID {admin_id}) установил IsActive={params['is_active']} для пользователя {username} (ID {user_id})"
             )
-            message = "Account activated" if is_active else "Account deactivated"
+            message = "Учетная запись активирована" if is_active else "Учетная запись деактивирована"
             return True, message
         except Exception as e:
             return False, str(e)
@@ -76,7 +77,7 @@ class AdminSettingsService:
         existing_user = self.db_engine.execute_query(check_query, [username, email])
 
         if not existing_user.empty:
-            return False, "User with this username or email already exists"
+            return False, "Пользователь с таким именем пользователя или адресом электронной почты уже существует."
 
         password_hash = generate_password_hash(password)
 
@@ -147,11 +148,11 @@ class AdminSettingsService:
             self.logger.log_action(
                 user_id=admin_id,
                 username=admin_username,
-                action="Admin Created Employee",
-                additional_info=f"Admin {admin_username} created employee {username}, ФИО: {full_name}"
+                action="Администратор создал сотрудника",
+                additional_info=f"Администратор {admin_username} создал сотрудника {username}, ФИО: {full_name}"
             )
 
-            return True, "Employee created successfully"
+            return True, "Сотрудник успешно создан"
 
         except Exception as e:
             return False, str(e)
@@ -179,7 +180,7 @@ class AdminSettingsService:
         admin = self.db_engine.execute_query(admin_query, [admin_id])
 
         if admin.empty:
-            return False, "Admin not found"
+            return False, "Администратор не найден"
 
         admin_username = admin.iloc[0]["Username"]
         fields_map = {
@@ -206,7 +207,7 @@ class AdminSettingsService:
                 update_parts.append(f"{column} = :{param_name}")
                 params[param_name] = value
         if not update_parts:
-            return False, "No fields to update"
+            return False, "Нет полей для обновления."
         update_parts.append("createdAt = :createdat")
         params["createdat"] = datetime.datetime.now()
         update_query = f"""
@@ -220,9 +221,9 @@ class AdminSettingsService:
             self.logger.log_action(
                 user_id=admin_id,
                 username=admin_username,
-                action="Admin Updated Employee",
-                additional_info=f"Admin {admin_username} updated employee ID {user_id}"
+                action="Администратор обновил информацию о сотруднике.",
+                additional_info=f"Администратор {admin_username} обновил сотрудника ID {user_id}"
             )
-            return True, "Employee updated successfully"
+            return True, "Информация о сотруднике успешно обновлена."
         except Exception as e:
             return False, str(e)

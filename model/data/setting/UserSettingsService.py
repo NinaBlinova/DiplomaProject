@@ -33,10 +33,10 @@ class UserSettingsService:
             self.logger.log_action(
                 user_id=user_id,
                 username=username,
-                action="Update Profile",
-                additional_info=f"FullName={full_name}, Email={email}, Bio={bio}"
+                action="Профиль обновлен",
+                additional_info=f"ФИО={full_name}, Email={email}, Био={bio}"
             )
-            return True, "Profile updated"
+            return True, "Профиль обновлен"
         except Exception as e:
             return False, str(e)
 
@@ -44,11 +44,11 @@ class UserSettingsService:
         query = "SELECT PasswordHash, Username FROM Users WHERE Id = ?"
         user = self.db.execute_query(query, [user_id])
         if user.empty:
-            return False, "User not found"
+            return False, "Пользователь не найден"
         stored_hash = user.iloc[0]["PasswordHash"]
         username = user.iloc[0]["Username"]
         if not check_password_hash(stored_hash, old_password):
-            return False, "Old password incorrect"
+            return False, "Старый пароль неверный"
         update_query = """
         UPDATE Users
         SET PasswordHash = :password,
@@ -64,9 +64,9 @@ class UserSettingsService:
         self.logger.log_action(
             user_id=user_id,
             username=username,
-            action="Change Password"
+            action="Изменение пароля"
         )
-        return True, "Password updated"
+        return True, "Пароль обновлен"
 
     def update_users_info(self, user_id, column_name, value):
         result = self.db.execute_query("SELECT Username FROM Users WHERE Id = ?", [user_id])
@@ -80,12 +80,12 @@ class UserSettingsService:
             self.logger.log_action(
                 user_id=user_id,
                 username=username,
-                action=f"Update {column_name}",
-                additional_info=f"New value: {value}"
+                action=f"Обновлено поле {column_name}",
+                additional_info=f"Новое значение: {value}"
             )
-            return True, "Value updated"
+            return True, "Значение обновлено"
         else:
-            return False, "Database error"
+            return False, "Ошибка БД"
 
     def get_avatar(self, user_id):
         query = """
@@ -97,10 +97,10 @@ class UserSettingsService:
             result = self.db.execute_query(query, [user_id])
 
             if result.empty:
-                return False, None, "User not found"
+                return False, None, "Пользователь не найден"
             avatar = result.iloc[0]["Avatar"]
             if avatar is None:
-                return False, None, "Avatar not found"
-            return True, avatar, "Avatar loaded"
+                return False, None, "Аватар не найден"
+            return True, avatar, "Аватар загружен"
         except Exception as e:
             return False, None, str(e)

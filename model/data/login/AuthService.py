@@ -18,11 +18,11 @@ class AuthService:
                 self.logger.log_action(
                     user_id=None,
                     username=username,
-                    action="Login Failed",
-                    additional_info="User not found"
+                    action="Ошибка входа",
+                    additional_info="Пользователь не найден"
                 )
                 print(f"[Login] User not found: {username}")
-                return False, "User not found"
+                return False, "Пользователь не найден"
             user_data = user.iloc[0]
             user_id = int(user_data["Id"])
             print(f'use_data {user_data}')
@@ -30,34 +30,34 @@ class AuthService:
                 self.logger.log_action(
                     user_id=user_id,
                     username=username,
-                    action="Login Failed",
-                    additional_info="User account inactive"
+                    action="Ошибка входа",
+                    additional_info="Аккаунт не активен"
                 )
                 print(f"[Login] User inactive: {username}")
-                return False, "User account is inactive"
+                return False, "Аккаунт не активен"
             password_hash = user_data.get("PasswordHash")
             if not password_hash:
                 self.logger.log_action(
                     user_id=user_id,
                     username=username,
-                    action="Login Failed",
-                    additional_info="Password hash missing"
+                    action="Ошибка входа",
+                    additional_info="Хэш пароля отсутствует"
                 )
                 print(f"[Login] PasswordHash missing for user: {username}")
-                return False, "Password hash missing"
+                return False, "Хэш пароля отсутствует"
             if not check_password_hash(password_hash, password):
                 self.logger.log_action(
                     user_id=user_id,
                     username=username,
-                    action="Login Failed",
-                    additional_info="Invalid password"
+                    action="Ошибка входа",
+                    additional_info="Неверный пароль"
                 )
                 print(f"[Login] Invalid password for user: {username}")
-                return False, "Invalid password"
+                return False, "Неверный пароль"
             self.logger.log_action(
                 user_id=user_id,
                 username=username,
-                action="Login Successful"
+                action="Вход успешный"
             )
             return True, user_data.to_dict()
         except Exception as e:
