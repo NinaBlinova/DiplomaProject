@@ -1,250 +1,337 @@
-# The Database for project - Taxpayer_Database_DiplomaProject (model/generate data/script.sql)
+# Tax Forecast Service — Backend
 
-# Database Documentation
+Flask-based backend for a web system that analyzes and forecasts tax revenue dynamics of self-employed individuals (NPD) and sole proprietors (IP) in Russia. Built as the server side of a bachelor's thesis (VKR) project.
 
-## Overview
+> **Scope note:** the system follows the taxation rules of the **Russian Federation** (self-employment tax, USN 6%/15%, OSNO, patent regimes for sole proprietors). All monetary values are in **Russian rubles (RUB)**, and all synthetic data is generated — no real taxpayer data is used (see [Why synthetic data](#why-synthetic-data)).
 
-This document provides comprehensive documentation for the Taxpayer_Database_DiplomaProject database. It includes
-information about the database schema, tables, relationships, and important considerations for developers and database
-administrators.
+This repository is the backend only. It's paired with a separate [Nuxt frontend](https://github.com/NinaBlinova/tax-dashboard-client) that renders the dashboard, charts, and reports.
 
-## Database Information
+## Table of contents
 
-- **Database Name**: Taxpayer_Database_DiplomaProject
-- **Database Type**: MS SQL
+- [Tech stack](#tech-stack)
+- [Architecture](#architecture)
+- [Database](#database)
+- [Getting started](#getting-started)
+- [Project structure](#project-structure)
+- [Forecasting models](#forecasting-models)
+- [Related repositories](#related-repositories)
 
-## Schema Diagram
+## Tech stack
 
-![Database Schema Diagram](img.png)
+| Layer | Technology |
+|---|---|
+| API server | [Flask](https://flask.palletsprojects.com/) + Flask-CORS |
+| Database | MS SQL Server (via SQLAlchemy + `pyodbc`, ODBC Driver 17) |
+| ML / forecasting | scikit-learn, LightGBM, XGBoost, joblib |
+| Data processing | pandas, NumPy |
+| Report generation | python-docx, matplotlib |
+| Synthetic data generation | Faker (`ru_RU` locale) |
 
-## Tables
+MS SQL Server was chosen for its stable integration with Python through `pyodbc` and support for parameterized queries (protection against SQL injection). Flask was chosen for its minimal, unopinionated structure, which made it easy to split the backend into independent modules (auth, analytics, reports) and plug in data-science libraries directly.
 
-### 1. **Taxpayer**
+## Architecture
 
-Stores basic information about taxpayers (individuals or entities).
+The architecture is documented using the **C4 model** (Context → Container → Component), built with [Structurizr](https://structurizr.com/).
 
-| Column Name           | Data Type     | Constraints                | Description                                       |
-|-----------------------|---------------|----------------------------|---------------------------------------------------|
-| TaxpayerId            | int           | IDENTITY(1,1), PRIMARY KEY | Unique identifier for each taxpayer               |
-| FullName              | nvarchar(200) | NOT NULL                   | Full name of the taxpayer                         |
-| PassportNumber        | nvarchar(20)  | NOT NULL, UNIQUE           | Passport number (unique)                          |
-| INN                   | char(12)      | NOT NULL, UNIQUE           | Taxpayer Identification Number (unique)           |
-| TaxpayerType          | char(10)      | NOT NULL                   | Type of taxpayer (e.g., individual, legal entity) |
-| activity_type         | nvarchar(100) | NOT NULL                   | Type of economic activity                         |
-| registration_district | nvarchar(100) | NOT NULL                   | District of registration                          |
-| has_employees         | bit           | NOT NULL                   | Whether the taxpayer has employees                |
-| employees_count       | int           | NULL                       | Number of employees (if has_employees = 1)        |
+### 1. System context
 
-**Check Constraint**: `CK_Taxpayer_Employees` ensures consistency between `has_employees` and `employees_count`:
+The system has two types of external actors: regular users (analysts, officials) who work with data to make decisions, and administrators who manage accounts and review audit logs.
 
-- If `has_employees = 0`, `employees_count` must be NULL
-- If `has_employees = 1`, `employees_count` must be ≥ 1
+<p align="center">
+  <img src="docs/images/c4-1-context-diagram-ru.png" alt="Russian" width="45%">
+  <img src="docs/images/c4-1-context-diagram-en.png" alt="English" width="45%">
+</p>
+<p align="center">
+  <em>Figure 1. System context diagram (Russian and English).</em>
+</p>
 
-### 2. **MonthlyTaxData**
+### 2. Containers
 
-Contains monthly tax declaration data for taxpayers.
+The system is split into four containers: the client (interface), the server (this repository), the analytics module, and the database.
 
-| Column Name        | Data Type     | Constraints                | Description                             |
-|--------------------|---------------|----------------------------|-----------------------------------------|
-| RecordId           | int           | IDENTITY(1,1), PRIMARY KEY | Unique record identifier                |
-| TaxpayerId         | int           | NOT NULL, FOREIGN KEY      | References Taxpayer(TaxpayerId)         |
-| Year               | smallint      | NOT NULL                   | Tax year                                |
-| Month              | tinyint       | NOT NULL                   | Tax month (1-12)                        |
-| TaxType            | char(10)      | NOT NULL                   | Type of tax                             |
-| IncomeAmount       | decimal(15,2) | NULL                       | Income amount for the period            |
-| TaxAmount          | decimal(15,2) | NOT NULL                   | Tax amount calculated                   |
-| season             | nvarchar(10)  | NOT NULL                   | Season (Winter, Spring, Summer, Autumn) |
-| transactions_count | int           | NOT NULL                   | Number of transactions                  |
+<p align="center">
+  <img src="docs/images/c4-2-container-diagram-ru.png" alt="Russian" width="45%">
+  <img src="docs/images/c4-2-container-diagram-en.png" alt="English" width="45%">
+</p>
+<p align="center">
+  <em>Figure 2. Container diagram (Russian and English).</em>
+</p>
 
-**Check Constraints**:
+- **Client** — [Nuxt.js](https://github.com/NinaBlinova/tax-dashboard-client) web app, renders the dashboard and reports.
+- **Server (Flask)** — handles REST requests, business logic, authorization, report generation, and forecasting. Split into three modules:
+  - **authModule** — login/logout, user settings, admin account management, audit logs.
+  - **reportModule** — exports dashboard data as `.docx` reports.
+  - **analyticsModule** — data aggregation, statistics, and ML-based forecasting.
+- **Database (MS SQL Server)** — stores taxpayers, transactions, users, and model metrics; supports scheduled backups via SQL Server Agent.
 
-- `Month` must be between 1 and 12
-- `season` must be one of: 'Зима' (Winter), 'Весна' (Spring), 'Лето' (Summer), 'Осень' (Autumn)
-- `transactions_count` must be ≥ 0
+### 3. Components — analytics module
 
-**Foreign Key**: `FK_MonthlyTax_Taxpayer` links to Taxpayer table
+The core module of the system, responsible for aggregating tax data, computing statistics, and generating forecasts.
 
-### 3. **Predict**
+<p align="center">
+  <img src="docs/images/c4-3-component-analytics-module-ru.png" alt="Russian" width="45%">
+  <img src="docs/images/c4-3-component-analytics-module-en.png" alt="English" width="45%">
+</p>
+<p align="center">
+  <em>Figure 3. Analytics module component diagram (Russian and English).</em>
+</p>
 
-Stores tax payment predictions generated by ML models.
+| Component | Responsibility | Source |
+|---|---|---|
+| Tax Data Repository | Runs SQL queries against the taxpayer database; the single entry point the rest of the module uses to read raw data | `model/data/taxs/TaxDataRepository.py` |
+| Aggregation Service | Aggregates income/tax/transactions by year, month, and taxpayer category (sums, averages, medians) | `model/data/taxs/AggregationService.py` |
+| Yearly Stats Loader | Loads month-by-month yearly statistics for charts | `model/data/taxs/YearlyLoader_by_month.py` |
+| Yearly Growth Loader | Computes year-over-year growth of income, tax, and transactions | `model/data/taxs/YearlyGrowthLoader.py` |
+| Forecast Service | Produces forecasts using the active ML model and historical data | `model/manegement_models/ForecastService.py` |
+| ML Models Storage | Central storage/registry for trained forecasting models | `model/manegement_models/ModelsRepository.py` |
+| DataFrame → JSON Helper | Converts pandas DataFrames into JSON for the REST API | used across `routes/routes_dashboard.py` |
+| Dashboard Routes | REST endpoints that expose aggregated and forecasted data to the client | `routes/routes_dashboard.py` |
 
-| Column Name           | Data Type     | Constraints                | Description                    |
-|-----------------------|---------------|----------------------------|--------------------------------|
-| PredictId             | int           | IDENTITY(1,1), PRIMARY KEY | Unique prediction identifier   |
-| TaxpayerId            | int           | NOT NULL                   | Taxpayer ID                    |
-| FullName              | nvarchar(255) | NOT NULL                   | Taxpayer's full name           |
-| INN                   | nvarchar(12)  | NOT NULL                   | Taxpayer Identification Number |
-| Year                  | int           | NOT NULL                   | Prediction year                |
-| Month                 | int           | NOT NULL                   | Prediction month               |
-| Income                | decimal(18,2) | NOT NULL                   | Predicted income               |
-| Transactions          | int           | NOT NULL                   | Predicted transaction count    |
-| Tax                   | decimal(18,2) | NOT NULL                   | Predicted tax amount           |
-| TaxType               | nvarchar(50)  | NULL                       | Type of tax                    |
-| TaxpayerType          | nvarchar(50)  | NULL                       | Type of taxpayer               |
-| activity_type         | nvarchar(50)  | NULL                       | Economic activity type         |
-| registration_district | nvarchar(100) | NULL                       | Registration district          |
-| has_employees         | bit           | NULL                       | Whether has employees          |
-| employees_count       | int           | NULL                       | Number of employees            |
-| ModelName             | nvarchar(100) | NULL                       | Name of ML model used          |
-| ModelVersion          | nvarchar(50)  | NULL                       | Version of ML model            |
+### 4. Components — authorization module
 
-### 4. **model_metrics**
+Handles authentication, access control, and account management.
 
-Stores performance metrics for machine learning models.
+<p align="center">
+  <img src="docs/images/c4-4-component-auth-module-ru.png" alt="Russian" width="45%">
+  <img src="docs/images/c4-4-component-auth-module-en.png" alt="English" width="45%">
+</p>
+<p align="center">
+  <em>Figure 4. Authorization module component diagram (Russian and English).</em>
+</p>
 
-| Column Name  | Data Type     | Constraints                     | Description                             |
-|--------------|---------------|---------------------------------|-----------------------------------------|
-| Id           | int           | IDENTITY(1,1), PRIMARY KEY      | Unique metric identifier                |
-| ModelName    | nvarchar(100) | NOT NULL                        | Name of the model                       |
-| TargetName   | nvarchar(100) | NOT NULL                        | Target variable predicted               |
-| DatasetType  | nvarchar(50)  | NOT NULL                        | Type of dataset (train/test/validation) |
-| MAE          | float         | NOT NULL                        | Mean Absolute Error                     |
-| RMSE         | float         | NOT NULL                        | Root Mean Square Error                  |
-| MSE          | float         | NOT NULL                        | Mean Square Error                       |
-| R2           | float         | NOT NULL                        | R-squared score                         |
-| MAPE         | float         | NULL                            | Mean Absolute Percentage Error          |
-| MedianAE     | float         | NULL                            | Median Absolute Error                   |
-| MaxError     | float         | NULL                            | Maximum Error                           |
-| Observations | int           | NULL                            | Number of observations                  |
-| ModelVersion | nvarchar(50)  | NULL                            | Model version                           |
-| TaxType      | nvarchar(20)  | NULL                            | Tax type the model predicts             |
-| CreatedAt    | datetime2(7)  | NOT NULL, DEFAULT sysdatetime() | Record creation timestamp               |
+| Component | Responsibility | Source |
+|---|---|---|
+| Auth Service | Login/logout, session validation | `model/data/login/AuthService.py` |
+| User Settings Service | Profile editing: name, password, avatar | `model/data/setting/UserSettingsService.py` |
+| Admin Settings Service | User registration, account editing, activation/deactivation, audit log viewing | `model/data/setting/AdminSettingsService.py` |
+| Login Routes | REST endpoints for sign-in / sign-out | `routes/routes_login.py` |
+| Settings Routes | REST endpoints for profile/password/avatar updates | `routes/routes_setting.py` |
+| Admin Routes | REST endpoints for account and log management | `routes/routes_admin.py` |
 
-### 5. **Users**
+## Database
 
-Stores system user information for authentication and authorization.
+**Database name:** `Taxpayer_Database_DiplomaProject` · **Engine:** MS SQL Server
 
-| Column Name  | Data Type      | Constraints                     | Description                      |
-|--------------|----------------|---------------------------------|----------------------------------|
-| Id           | int            | IDENTITY(1,1), PRIMARY KEY      | Unique user identifier           |
-| Username     | nvarchar(50)   | NOT NULL, UNIQUE                | Username for login               |
-| Email        | nvarchar(255)  | NOT NULL, UNIQUE                | User email address               |
-| PasswordHash | nvarchar(255)  | NOT NULL                        | Hashed password                  |
-| FullName     | nvarchar(150)  | NOT NULL                        | User's full name                 |
-| Bio          | nvarchar(max)  | NULL                            | User biography                   |
-| Avatar       | varbinary(max) | NULL                            | User avatar image                |
-| CreatedAt    | datetime2(7)   | NOT NULL, DEFAULT sysdatetime() | Account creation timestamp       |
-| IsActive     | bit            | NULL, DEFAULT 1                 | Whether user account is active   |
-| user_role    | nvarchar(15)   | NULL                            | User role (admin/analyst/viewer) |
+### Why synthetic data
 
-### 6. **Logs**
+Real taxpayer information is protected under Russian tax secrecy law (Article 102 of the Tax Code) and personal-data protection law (Federal Law No. 152-FZ). To develop and demonstrate the system without any confidentiality risk, all data is **synthetically generated**, calibrated against public aggregate statistics from the Federal Tax Service (FTS), the "Tax on Professional Income" service, and the SME registry — so distributions, seasonality, and income-to-tax ratios stay realistic without using a single real record.
 
-Tracks user activities in the system.
+### Schema
 
-| Column Name    | Data Type     | Constraints                | Description                     |
-|----------------|---------------|----------------------------|---------------------------------|
-| Id             | bigint        | IDENTITY(1,1), PRIMARY KEY | Unique log identifier           |
-| UserId         | int           | NULL, FOREIGN KEY          | References Users(Id)            |
-| Username       | nvarchar(100) | NOT NULL                   | Username of the actor           |
-| Action         | nvarchar(500) | NOT NULL                   | Description of action performed |
-| ActionDate     | datetime2(7)  | NOT NULL                   | Timestamp of action             |
-| AdditionalInfo | nvarchar(max) | NULL                       | Additional context information  |
+The schema is split into three logical groups:
 
-**Foreign Key**: `FK_Logs_Users` with CASCADE DELETE
+**1. Users & audit log** — `Users` holds staff accounts (credentials, role, active status, personal data); `Logs` records user actions (login/logout, profile edits, report generation) with a cascading FK to `Users`.
 
-### 7. **yearly_stats_general**
+![Users and Logs tables](docs/images/db-schema-1-auth-tables.png)
 
-Stores general yearly statistics aggregated from tax data.
+**2. Taxpayers & financial data** — `Taxpayer` holds core taxpayer info (INN, activity type, district, employee count); `MonthlyTaxData` holds monthly income/tax/transaction figures per taxpayer; `Predict` stores ML-generated forecasts.
 
-| Column Name         | Data Type     | Constraints                 | Description                |
-|---------------------|---------------|-----------------------------|----------------------------|
-| Id                  | int           | IDENTITY(1,1), PRIMARY KEY  | Unique record identifier   |
-| Year                | int           | NOT NULL                    | Statistical year           |
-| Month               | int           | NOT NULL                    | Statistical month          |
-| TaxType             | char(10)      | NULL                        | Type of tax                |
-| IncomeGeneral       | decimal(18,2) | NOT NULL                    | General income total       |
-| TaxGeneral          | decimal(18,2) | NOT NULL                    | General tax total          |
-| TransactionsGeneral | decimal(18,2) | NOT NULL                    | General transaction total  |
-| CreatedAt           | datetime2(7)  | NULL, DEFAULT sysdatetime() | Record creation timestamp  |
-| ModelName           | nvarchar(100) | NULL                        | Model used for calculation |
-| ModelVersion        | nvarchar(50)  | NULL                        | Model version              |
+![Taxpayer and MonthlyTaxData tables](docs/images/db-schema-2-taxpayer-tables.png)
 
-### 8. **yearly_stats_median**
+**3. Statistics & model metrics** — `yearly_stats_general`/`yearly_stats_median` aggregate income, tax, and transactions by year for charts; `yearly_growth_general`/`yearly_growth_median` compute year-over-year growth; `model_metrics` stores model quality metrics (MAE, RMSE, R², MAPE, etc.).
 
-Stores median yearly statistics aggregated from tax data.
+![Statistics and model_metrics tables](docs/images/db-schema-3-analytics-tables.png)
 
-| Column Name        | Data Type     | Constraints                 | Description                |
-|--------------------|---------------|-----------------------------|----------------------------|
-| Id                 | int           | IDENTITY(1,1), PRIMARY KEY  | Unique record identifier   |
-| Year               | int           | NOT NULL                    | Statistical year           |
-| Month              | int           | NOT NULL, DEFAULT 1         | Statistical month          |
-| TaxType            | char(10)      | NULL                        | Type of tax                |
-| IncomeMedian       | decimal(18,2) | NOT NULL                    | Median income              |
-| TaxMedian          | decimal(18,2) | NOT NULL                    | Median tax                 |
-| TransactionsMedian | decimal(18,2) | NOT NULL                    | Median transactions        |
-| CreatedAt          | datetime2(7)  | NULL, DEFAULT sysdatetime() | Record creation timestamp  |
-| ModelName          | nvarchar(100) | NULL                        | Model used for calculation |
-| ModelVersion       | nvarchar(50)  | NULL                        | Model version              |
+<details>
+<summary>Full table reference</summary>
 
-### 9. **yearly_growth_general**
+#### Taxpayer
 
-Stores general yearly growth metrics.
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| TaxpayerId | int | IDENTITY(1,1), PK | Unique taxpayer identifier |
+| FullName | nvarchar(200) | NOT NULL | Full name |
+| PassportNumber | nvarchar(20) | NOT NULL, UNIQUE | Passport number |
+| INN | char(12) | NOT NULL, UNIQUE | Taxpayer identification number |
+| TaxpayerType | char(10) | NOT NULL | `SZ`, `IP6`, `IP15`, `IPOS`, `IPP` |
+| activity_type | nvarchar(100) | NOT NULL | Economic activity type |
+| registration_district | nvarchar(100) | NOT NULL | District of registration |
+| has_employees | bit | NOT NULL | Whether the taxpayer has employees |
+| employees_count | int | NULL | Number of employees (required if `has_employees = 1`, must be NULL otherwise — enforced by `CK_Taxpayer_Employees`) |
 
-| Column Name        | Data Type     | Constraints                 | Description                    |
-|--------------------|---------------|-----------------------------|--------------------------------|
-| Id                 | int           | IDENTITY(1,1), PRIMARY KEY  | Unique record identifier       |
-| Year               | int           | NOT NULL                    | Growth year                    |
-| TaxType            | char(10)      | NULL                        | Type of tax                    |
-| IncomeGrowth       | decimal(10,2) | NOT NULL                    | Income growth percentage       |
-| TaxGrowth          | decimal(10,2) | NOT NULL                    | Tax growth percentage          |
-| TransactionsGrowth | decimal(10,2) | NOT NULL                    | Transactions growth percentage |
-| CreatedAt          | datetime2(7)  | NULL, DEFAULT sysdatetime() | Record creation timestamp      |
-| IncomeTotal        | decimal(18,2) | NOT NULL, DEFAULT 0         | Total income                   |
-| TaxTotal           | decimal(18,2) | NOT NULL, DEFAULT 0         | Total tax                      |
-| TransactionTotal   | decimal(18,2) | NOT NULL, DEFAULT 0         | Total transactions             |
-| ModelName          | nvarchar(100) | NULL                        | Model used for calculation     |
-| ModelVersion       | nvarchar(50)  | NULL                        | Model version                  |
+#### MonthlyTaxData
 
-### 10. **yearly_growth_median**
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| RecordId | int | IDENTITY(1,1), PK | Unique record id |
+| TaxpayerId | int | NOT NULL, FK → Taxpayer | Owning taxpayer |
+| Year | smallint | NOT NULL | Tax year |
+| Month | tinyint | NOT NULL, CHECK 1–12 | Tax month |
+| TaxType | char(10) | NOT NULL | Tax regime code |
+| IncomeAmount | decimal(15,2) | NULL | Income for the period |
+| TaxAmount | decimal(15,2) | NOT NULL | Calculated tax |
+| season | nvarchar(10) | NOT NULL, CHECK | `Зима`/`Весна`/`Лето`/`Осень` |
+| transactions_count | int | NOT NULL, CHECK ≥ 0 | Number of transactions |
 
-Stores median yearly growth metrics.
+#### Predict
 
-| Column Name        | Data Type     | Constraints                 | Description                           |
-|--------------------|---------------|-----------------------------|---------------------------------------|
-| Id                 | int           | IDENTITY(1,1), PRIMARY KEY  | Unique record identifier              |
-| Year               | int           | NOT NULL                    | Growth year                           |
-| TaxType            | char(10)      | NULL                        | Type of tax                           |
-| IncomeTotal        | decimal(18,2) | NOT NULL                    | Total income                          |
-| TaxTotal           | decimal(18,2) | NOT NULL                    | Total tax                             |
-| TransactionTotal   | decimal(18,2) | NOT NULL                    | Total transactions                    |
-| IncomeGrowth       | decimal(10,2) | NOT NULL                    | Median income growth percentage       |
-| TaxGrowth          | decimal(10,2) | NOT NULL                    | Median tax growth percentage          |
-| TransactionsGrowth | decimal(10,2) | NOT NULL                    | Median transactions growth percentage |
-| CreatedAt          | datetime2(7)  | NULL, DEFAULT sysdatetime() | Record creation timestamp             |
-| ModelName          | nvarchar(100) | NULL                        | Model used for calculation            |
-| ModelVersion       | nvarchar(50)  | NULL                        | Model version                         |
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| PredictId | int | IDENTITY(1,1), PK | Unique prediction id |
+| TaxpayerId, FullName, INN | — | NOT NULL | Taxpayer reference/snapshot |
+| Year, Month | int | NOT NULL | Forecast period |
+| Income, Transactions, Tax | decimal/int | NOT NULL | Forecasted values |
+| TaxType, TaxpayerType, activity_type, registration_district | nvarchar | NULL | Taxpayer context at prediction time |
+| has_employees, employees_count | bit / int | NULL | Taxpayer context at prediction time |
+| ModelName, ModelVersion | nvarchar | NULL | Model used for the prediction |
 
-## How to fill in the data in the database
+#### model_metrics
 
-model/generate data - directory contains files for generating data
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| Id | int | IDENTITY(1,1), PK | Unique metric id |
+| ModelName, TargetName, DatasetType | nvarchar | NOT NULL | Model, predicted target, dataset split |
+| MAE, RMSE, MSE, R2 | float | NOT NULL | Core error metrics |
+| MAPE, MedianAE, MaxError, Observations | float/int | NULL | Extra diagnostics |
+| ModelVersion, TaxType | nvarchar | NULL | Model version / tax regime |
+| CreatedAt | datetime2(7) | NOT NULL, DEFAULT sysdatetime() | Timestamp |
 
-### model/generate data/generate data taxpayer.py
+#### Users
 
-**Purpose**: Master script for generating and populating the `Taxpayer` table with synthetic taxpayer records.
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| Id | int | IDENTITY(1,1), PK | Unique user id |
+| Username, Email | nvarchar | NOT NULL, UNIQUE | Login credentials |
+| PasswordHash | nvarchar(255) | NOT NULL | Hashed password |
+| FullName | nvarchar(150) | NOT NULL | Full name |
+| Bio | nvarchar(max) | NULL | Biography |
+| Avatar | varbinary(max) | NULL | Avatar image |
+| CreatedAt | datetime2(7) | NOT NULL, DEFAULT sysdatetime() | Account creation time |
+| IsActive | bit | DEFAULT 1 | Active status |
+| user_role | nvarchar(15) | NULL | `admin` / `analyst` / `viewer` |
+| PassportSeries, PassportNumber, PassportIssuedBy, PassportIssueDate | — | NULL | Passport data |
+| SNILS, INN, OMSPolicyNumber | — | NULL | Personal identifiers |
+| BirthDate, Gender, Address_Reg, Phone | — | NULL | Personal data |
 
-**Functionality**:
+#### Logs
 
-- Creates taxpayer profiles with realistic Russian names, passport numbers, and INNs
-- Assigns taxpayer types (IP - Individual Entrepreneur, SZ - Self-Employed, etc.)
-- Generates activity types based on taxpayer category
-- Assigns registration districts
-- Determines employee status and counts
-- Ensures data uniqueness for critical fields (INN, PassportNumber)
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| Id | bigint | IDENTITY(1,1), PK | Unique log id |
+| UserId | int | NULL, FK → Users, ON DELETE CASCADE | Actor |
+| Username | nvarchar(100) | NOT NULL | Actor's username (snapshot) |
+| Action | nvarchar(500) | NOT NULL | Description of the action |
+| ActionDate | datetime2(7) | NOT NULL | Timestamp |
+| AdditionalInfo | nvarchar(max) | NULL | Extra context |
 
-### model/generate data/SZ.py
+#### yearly_stats_general / yearly_stats_median
 
-**Purpose**: Generates monthly tax data for self-employed individuals using a 6% tax rate on actual income.
+Aggregated income/tax/transaction totals (`_general`) and medians (`_median`) per year and month, with `ModelName`/`ModelVersion` for traceability and `CreatedAt` for versioning.
 
-### model/generate data/IP15.py
+#### yearly_growth_general / yearly_growth_median
 
-**Purpose**:  Generates monthly tax data for individual entrepreneurs using a 15% tax rate on actual income.
-For IP6 data generate similar method
+Year-over-year growth percentages for income, tax, and transactions, alongside the underlying totals, per tax regime.
 
-### model/generate data/IPOS.py
+</details>
 
-**Purpose**: Generates monthly tax data for individual entrepreneurs using a **20% tax rate on actual income**.
+### Setting up the database
 
-### model/generate data/IPP.py
+**1. Create the schema**
 
-**Purpose**: Generates monthly tax data for individual entrepreneurs using a **patent system (6% tax on potential
-income)**, where a base potential income is set for each activity type.
+Run the DDL script against your SQL Server instance:
+
+```sql
+-- model/generate data/script.sql
+```
+
+This creates all tables, primary/foreign keys, and check constraints (e.g. `CK_Taxpayer_Employees`, `CK_MonthlyTaxData_Season`).
+
+**2. Fill it with synthetic data**
+
+Scripts live under `model/generate data/`. Run them in this order:
+
+1. **`generate data taxpayer.py`** — populates the `Taxpayer` table: generates realistic Russian names (via Faker), unique passport numbers and INNs, taxpayer type (`SZ`, `IP6`, `IP15`, `IPOS`, `IPP`), activity type, district, and employee status.
+2. **`SZ.py`**, **`IP15.py`**, **`IPOS.py`**, **`IPP.py`** — each generates monthly `MonthlyTaxData` records for its taxpayer type, applying the seasonal and district coefficients described in the thesis (§2.6.2–2.6.3): base income per activity/year → seasonal factor → district factor → employee-count factor → tax calculated per regime's rules (6% of income for NPD/USN 6%, 15% of income-minus-expenses for USN 15%, 20% of income for OSNO, fixed monthly amount from potential income for the patent system).
+
+All scripts connect with Windows/Trusted authentication by default (see [Configuration](#configuration)) and commit in batches for performance on large volumes.
+
+## Getting started
+
+### Prerequisites
+
+- Python 3.10+
+- MS SQL Server (local or remote) + **ODBC Driver 17 for SQL Server**
+- The database created and filled as described [above](#setting-up-the-database)
+
+### Installation
+
+```bash
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install flask flask-cors sqlalchemy pyodbc pandas numpy scikit-learn lightgbm xgboost joblib python-docx matplotlib faker
+```
+
+> The repo doesn't currently ship a `requirements.txt` — consider running `pip freeze > requirements.txt` once your environment is set up and committing it, so the project is reproducible for others.
+
+### Configuration
+
+The database connection is defined in `model/database.py`:
+
+```python
+DatabaseEngine(
+    server="localhost",
+    database="Taxpayer_Database_DiplomaProject",
+    driver="ODBC Driver 17 for SQL Server",
+)
+```
+
+It builds a `mssql+pyodbc` SQLAlchemy connection string using Windows Trusted Authentication (`trusted_connection=yes`) — no password is stored in the code. If your SQL Server instance uses a different host, database name, or SQL authentication, adjust the values passed to `DatabaseEngine` in `app.py` (or extend it to read from environment variables — recommended if you plan to deploy this outside your own machine).
+
+### Run the server
+
+```bash
+python app.py
+```
+
+The API starts on `http://localhost:5002`. On startup, `create_app()` wires the database engine, the tax data repository, the forecast service (defaults to `XGBoost v1.0`), the aggregation service, and all route blueprints (dashboard, models, login, settings, admin, reports); `initialize_predictions()` warms up the active model's predictions before the app starts serving requests.
+
+To connect the [frontend](https://github.com/NinaBlinova/tax-dashboard-client), point its `NUXT_PUBLIC_BACKEND_URL` at this server's address.
+
+### Tests
+
+```bash
+pytest model/test/
+```
+
+Covers repositories, services, and routes (`model/test/test_repository.py`, `test_services.py`, `test_routes.py`).
+
+## Project structure
+
+```
+.
+├── app.py                        # Flask app factory & entry point
+├── model/
+│   ├── database.py                # DatabaseEngine — SQLAlchemy/pyodbc connection to MS SQL
+│   ├── data/
+│   │   ├── LoggerService.py        # writes to the Logs table
+│   │   ├── UserRepository.py
+│   │   ├── login/AuthService.py    # authModule: login/logout
+│   │   ├── setting/                # authModule: user & admin settings
+│   │   ├── taxpayers/              # Taxpayer CRUD (repository + service)
+│   │   └── taxs/                   # analyticsModule: repository, aggregation, yearly loaders
+│   ├── manegement_models/
+│   │   ├── ForecastService.py      # runs the active model against historical data
+│   │   ├── ModelsRepository.py     # ML Models Storage
+│   │   └── model_metrics/          # metric calculation helpers
+│   ├── regression/                 # model training scripts + trained artifacts (.pkl)
+│   │   ├── LinearRegression/
+│   │   ├── LightGBM/
+│   │   └── XGBoost/
+│   ├── generate data/               # synthetic data generation (see above) + script.sql
+│   └── test/                        # pytest suite
+└── routes/                        # REST blueprints (dashboard, models, login, setting, admin, reports, taxpayers)
+```
+
+## Forecasting models
+
+The analytics module supports pluggable forecasting models, trained on the synthetic dataset and evaluated on income, tax, and transaction volume:
+
+- **LinearRegression** (`model/regression/LinearRegression/`)
+- **LightGBM** (`model/regression/LightGBM/`)
+- **XGBoost** (`model/regression/XGBoost/`) — the default active model
+
+Each model is trained per target (income / tax / transactions), serialized with `joblib`, and evaluated with MAE, RMSE, MSE, R², MAPE, median absolute error, and max error — persisted to `model_metrics` for comparison in the dashboard's "Models" section. The active model and version are configurable in `app.py` (`ACTIVE_MODEL_NAME`, `ACTIVE_MODEL_VERSION`) and switchable at runtime via the admin UI / `routes_models.py`.
+
+## Related repositories
+
+- **Frontend (Nuxt 4 dashboard):** [tax-dashboard-client](https://github.com/NinaBlinova/tax-dashboard-client)

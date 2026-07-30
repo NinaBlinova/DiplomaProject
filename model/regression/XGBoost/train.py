@@ -1,3 +1,5 @@
+# model/regression/XGBoost/train.py
+
 import joblib
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -80,7 +82,6 @@ def train_xgboost(X, y, model_name):
             max_depth=6,
             subsample=0.8,
             colsample_bytree=0.8,
-            objective='reg:squarederror',
             random_state=42,
             n_jobs=-1
         ))

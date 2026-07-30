@@ -10,10 +10,13 @@ class AdminSettingsService:
         self.logger = LoggerService(db_engine)
 
     def manage_account(self, admin_id: int, target_user_id: int, is_active: bool):
-        admin_query = "SELECT Username FROM Users WHERE Id = ?"
+        admin_query = "SELECT Username, user_role FROM Users WHERE Id = ?"
         admin = self.db_engine.execute_query(admin_query, [admin_id])
         if admin.empty:
             return False, "Admin not found"
+        admin_role = admin.iloc[0]["user_role"]
+        if admin_role != "admin":
+            return False, "Недостаточно прав"
         admin_username = admin.iloc[0]["Username"]
         user_query = "SELECT Id, Username FROM Users WHERE Id = ?"
         user = self.db_engine.execute_query(user_query, [target_user_id])
@@ -65,11 +68,15 @@ class AdminSettingsService:
             address_reg: str = None,
             phone: str = None
     ):
-        admin_query = "SELECT Username FROM Users WHERE Id = ?"
+        admin_query = "SELECT Username, user_role FROM Users WHERE Id = ?"
         admin = self.db_engine.execute_query(admin_query, [admin_id])
 
         if admin.empty:
             return False, "Admin not found"
+
+        admin_role = admin.iloc[0]["user_role"]
+        if admin_role != "admin":
+            return False, "Недостаточно прав"
 
         admin_username = admin.iloc[0]["Username"]
 
@@ -176,11 +183,15 @@ class AdminSettingsService:
             phone: str = None
     ):
 
-        admin_query = "SELECT Username FROM Users WHERE Id = ?"
+        admin_query = "SELECT Username, user_role FROM Users WHERE Id = ?"
         admin = self.db_engine.execute_query(admin_query, [admin_id])
 
         if admin.empty:
             return False, "Администратор не найден"
+
+        admin_role = admin.iloc[0]["user_role"]
+        if admin_role != "admin":
+            return False, "Недостаточно прав"
 
         admin_username = admin.iloc[0]["Username"]
         fields_map = {

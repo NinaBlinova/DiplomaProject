@@ -1,4 +1,7 @@
+# model/regression/LinearRegression/train.py
+
 import joblib
+from sklearn.linear_model import LinearRegression
 from sqlalchemy import create_engine
 import pandas as pd
 import numpy as np
@@ -7,8 +10,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
-import plotly.graph_objects as go
-from xgboost import XGBRegressor
 
 engine = create_engine(
     "mssql+pyodbc://@localhost/Taxpayer_Database_DiplomaProject?" +
@@ -91,13 +92,7 @@ def train_and_evaluate(X, y, model_name):
 
     model = Pipeline([
         ('preprocessor', preprocessor),
-        ('regressor', XGBRegressor(
-            n_estimators=500,
-            max_depth=5,
-            learning_rate=0.05,
-            objective='reg:squarederror',
-            random_state=42
-        ))
+        ('regressor', LinearRegression())
     ])
 
     model.fit(X_train, y_train)
